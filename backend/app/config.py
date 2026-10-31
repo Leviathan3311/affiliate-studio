@@ -30,6 +30,27 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.8-flash"
     llm_timeout_seconds: float = 20.0
+    # Stream 2 (research, scripts, viral cut): Gemini 3.8 Flash; deep research on 2.5 Pro
+    gemini_deep_model: str = "gemini-2.5-pro"
+    research_timeout_seconds: float = 180.0
+
+    # Object storage (system design §1 rule 2: media never in the DB). Empty r2_* = local disk.
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket: str = "growthpilot-media"
+    local_media_dir: str = "./media"
+    presign_seconds: int = 6 * 3600
+    max_upload_mb: int = 500
+    storage_quota_mb: int = 10 * 1024  # R2 free tier
+
+    # Kaggle media workers authenticate with this token (Kaggle Secret MEDIA_WORKER_TOKEN)
+    media_worker_token: str = ""
+    media_job_stale_minutes: int = 20
+
+    # Optional Upstash Redis REST queue filled by the Cloudflare webhook edge gateway at night
+    upstash_redis_rest_url: str = ""
+    upstash_redis_rest_token: str = ""
 
     worker_poll_seconds: float = 2.0
 

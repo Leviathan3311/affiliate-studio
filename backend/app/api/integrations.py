@@ -137,6 +137,24 @@ def disconnect(account_id: uuid.UUID, ctx: Admin):
     ctx.db.commit()
 
 
+def accept_webhook(db, body: bytes, signature: str | None) -> bool:
+    """Verify + enqueue one Meta delivery. Shared by the HTTP route and the edge-queue drain."""
+    s = get_settings()
+    if (s.meta_app_secret or s.env != "dev") and not verify_meta_signature(body, signature):
+        return False
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return False
+    for key, event in meta.parse_messaging_events(payload):
+        try:
+            with db.begin_nested():
+                db.add(WebhookEvent(dedupe_key=key, page_id=event["page_id"], payload=event))
+        except IntegrityError:
+            pass  # duplicate delivery; already queued
+    return True
+
+
 # --- Webhook gateway: verify, enqueue, ACK. Never call the LLM here (NFR webhook ACK). ---
 
 
@@ -154,20 +172,7 @@ def webhook_verify(
 @router.post("/webhooks/meta", response_class=PlainTextResponse)
 async def webhook_receive(request: Request, db: DB):
     body = await request.body()
-    s = get_settings()
-    signed = verify_meta_signature(body, request.headers.get("x-hub-signature-256"))
-    if (s.meta_app_secret or s.env != "dev") and not signed:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "bad signature")
-    try:
-        payload = json.loads(body)
-    except json.JSONDecodeError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid json") from None
-
-    for key, event in meta.parse_messaging_events(payload):
-        try:
-            with db.begin_nested():
-                db.add(WebhookEvent(dedupe_key=key, page_id=event["page_id"], payload=event))
-        except IntegrityError:
-            pass  # duplicate delivery; already queued
+    if not accept_webhook(db, body, request.headers.get("x-hub-signature-256")):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "bad signature or payload")
     db.commit()
     return "EVENT_RECEIVED"

@@ -9,7 +9,9 @@ import httpx
 from app.config import get_settings
 from app.db import utcnow
 
-SCOPES = "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement"
+SCOPES = (
+    "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement,pages_manage_posts"
+)
 
 
 def _graph(path: str) -> str:
@@ -150,3 +152,28 @@ def fetch_profile_name(page_token: str, psid: str) -> str:
         return r.json().get("name", "") if r.status_code == 200 else ""
     except httpx.HTTPError:
         return ""
+
+
+def publish(
+    page_id: str, page_token: str, media_type: str, media_url: str, caption: str
+) -> SendResult:
+    """Organic Page post (MOD-05). Photo via /photos, video via graph-video /videos with file_url."""
+    if get_settings().meta_dry_run:
+        return SendResult(True, "dry_run", message_id=None)
+    if media_type == "photo":
+        url, data = _graph(f"{page_id}/photos"), {"url": media_url, "message": caption}
+    else:
+        v = get_settings().meta_graph_version
+        url = f"https://graph-video.facebook.com/{v}/{page_id}/videos"
+        data = {"file_url": media_url, "description": caption}
+    try:
+        r = httpx.post(url, params={"access_token": page_token}, data=data, timeout=120)
+    except httpx.HTTPError as e:
+        # Unknown outcome: the post may exist. Caller must not blindly retry (no duplicate posts).
+        return SendResult(False, "unknown", error=f"{type(e).__name__}: {e}")
+    body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    if r.status_code >= 400:
+        return SendResult(
+            False, "failed", error=body.get("error", {}).get("message") or r.text[:300]
+        )
+    return SendResult(True, "sent", message_id=body.get("post_id") or body.get("id"))

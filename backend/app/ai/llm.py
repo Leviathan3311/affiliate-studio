@@ -118,3 +118,80 @@ def complete_json(
             rec.latency_ms = int((time.monotonic() - started) * 1000)
             db.add(rec)
     raise LLMUnavailable("; ".join(errors) or "no providers")
+
+
+# --- Stream 2: Gemini only (research, scripts, project context, orchestrator) ---
+
+
+@dataclass
+class GeminiResult:
+    data: dict
+    model: str
+    sources: list[dict]  # [{index, url, title}] from Google Search grounding, never model-invented
+
+
+def _parse_json_text(text: str) -> dict:
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0]
+    return json.loads(text)
+
+
+def gemini_json(
+    db: Session,
+    *,
+    system: str,
+    parts: list[dict],
+    purpose: str,
+    workspace_id: uuid.UUID | None,
+    deep: bool = False,
+    search: bool = False,
+    timeout: float | None = None,
+) -> GeminiResult:
+    """One Gemini call returning JSON. `parts` are Gemini content parts (text / inline_data)."""
+    s = get_settings()
+    if not s.gemini_api_key:
+        raise LLMUnavailable("gemini: no api key")
+    model = s.gemini_deep_model if deep else s.gemini_model
+    parts = [{"text": mask_pii(p["text"])} if "text" in p else p for p in parts]
+    body: dict = {
+        "systemInstruction": {"parts": [{"text": system}]},
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": {"temperature": 0.4, "responseMimeType": "application/json"},
+    }
+    if search:
+        body["tools"] = [{"google_search": {}}]
+    rec = AIUsageRecord(workspace_id=workspace_id, purpose=purpose, provider="gemini", model=model)
+    started = time.monotonic()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    headers = {"x-goog-api-key": s.gemini_api_key}
+    try:
+        r = httpx.post(
+            url, headers=headers, json=body, timeout=timeout or s.research_timeout_seconds
+        )
+        if r.status_code == 400 and search:
+            # Some models refuse JSON mode together with tools: ask for JSON in text instead.
+            body["generationConfig"].pop("responseMimeType")
+            r = httpx.post(
+                url, headers=headers, json=body, timeout=timeout or s.research_timeout_seconds
+            )
+        r.raise_for_status()
+        out = r.json()
+        cand = out["candidates"][0]
+        text = "".join(p.get("text", "") for p in cand["content"]["parts"])
+        usage = out.get("usageMetadata", {})
+        rec.input_tokens = usage.get("promptTokenCount", 0)
+        rec.output_tokens = usage.get("candidatesTokenCount", 0)
+        chunks = cand.get("groundingMetadata", {}).get("groundingChunks", [])
+        sources = [
+            {"index": i, "url": c["web"].get("uri", ""), "title": c["web"].get("title", "")}
+            for i, c in enumerate(chunks)
+            if "web" in c
+        ]
+        return GeminiResult(_parse_json_text(text), model, sources)
+    except (httpx.HTTPError, json.JSONDecodeError, KeyError, IndexError) as e:
+        rec.success, rec.error = False, f"{type(e).__name__}: {e}"[:500]
+        raise LLMUnavailable(f"gemini: {rec.error}") from e
+    finally:
+        rec.latency_ms = int((time.monotonic() - started) * 1000)
+        db.add(rec)

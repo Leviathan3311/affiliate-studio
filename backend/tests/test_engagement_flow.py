@@ -146,7 +146,9 @@ def test_human_reply_goes_through_policy_and_is_recorded(client, db, spa, llm):
     assert body["decision"]["decision"] == "ALLOW"
     assert body["message"]["provider_status"] == "dry_run"
     detail = client.get(f"/api/v1/conversations/{conv.id}", headers=spa).json()
-    assert [m["direction"] for m in detail["messages"]] == ["in", "out"]
+    # ignore the quiet-hours auto-ack, which depends on the wall clock when the test runs
+    human = [m["direction"] for m in detail["messages"] if m["actor"] != "system"]
+    assert human == ["in", "out"]
 
 
 def test_llm_outage_escalates_to_human(client, db, spa, monkeypatch):

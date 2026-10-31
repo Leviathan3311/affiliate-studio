@@ -42,8 +42,12 @@ def db(engine):
 
 
 @pytest.fixture
-def client(engine):
+def client(engine, monkeypatch, tmp_path):
+    from app.config import get_settings
+
     Session = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr(app_db, "SessionLocal", Session)  # background tasks + worker
+    monkeypatch.setattr(get_settings(), "local_media_dir", str(tmp_path / "media"))
 
     def override():
         with Session() as s:
