@@ -137,6 +137,9 @@ def _parse_json_text(text: str) -> dict:
     return json.loads(text)
 
 
+RETRYABLE = {429, 500, 502, 503, 504}
+
+
 def gemini_json(
     db: Session,
     *,
@@ -148,50 +151,61 @@ def gemini_json(
     search: bool = False,
     timeout: float | None = None,
 ) -> GeminiResult:
-    """One Gemini call returning JSON. `parts` are Gemini content parts (text / inline_data)."""
+    """One Gemini call returning JSON. `parts` are Gemini content parts (text / inline_data).
+    Falls back through gemini_fallback_models on overload (503), quota (429) or timeouts."""
     s = get_settings()
     if not s.gemini_api_key:
         raise LLMUnavailable("gemini: no api key")
-    model = s.gemini_deep_model if deep else s.gemini_model
+    chain = ([s.gemini_deep_model] if deep else []) + [s.gemini_model, *s.gemini_fallback_models]
+    models = list(dict.fromkeys(chain))
     parts = [{"text": mask_pii(p["text"])} if "text" in p else p for p in parts]
-    body: dict = {
-        "systemInstruction": {"parts": [{"text": system}]},
-        "contents": [{"role": "user", "parts": parts}],
-        "generationConfig": {"temperature": 0.4, "responseMimeType": "application/json"},
-    }
-    if search:
-        body["tools"] = [{"google_search": {}}]
-    rec = AIUsageRecord(workspace_id=workspace_id, purpose=purpose, provider="gemini", model=model)
-    started = time.monotonic()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    headers = {"x-goog-api-key": s.gemini_api_key}
-    try:
-        r = httpx.post(
-            url, headers=headers, json=body, timeout=timeout or s.research_timeout_seconds
+    errors = []
+    for model in models:
+        body: dict = {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {"temperature": 0.4, "responseMimeType": "application/json"},
+        }
+        if search:
+            body["tools"] = [{"google_search": {}}]
+        rec = AIUsageRecord(
+            workspace_id=workspace_id, purpose=purpose, provider="gemini", model=model
         )
-        if r.status_code == 400 and search:
-            # Some models refuse JSON mode together with tools: ask for JSON in text instead.
-            body["generationConfig"].pop("responseMimeType")
-            r = httpx.post(
-                url, headers=headers, json=body, timeout=timeout or s.research_timeout_seconds
-            )
-        r.raise_for_status()
-        out = r.json()
-        cand = out["candidates"][0]
-        text = "".join(p.get("text", "") for p in cand["content"]["parts"])
-        usage = out.get("usageMetadata", {})
-        rec.input_tokens = usage.get("promptTokenCount", 0)
-        rec.output_tokens = usage.get("candidatesTokenCount", 0)
-        chunks = cand.get("groundingMetadata", {}).get("groundingChunks", [])
-        sources = [
-            {"index": i, "url": c["web"].get("uri", ""), "title": c["web"].get("title", "")}
-            for i, c in enumerate(chunks)
-            if "web" in c
-        ]
-        return GeminiResult(_parse_json_text(text), model, sources)
-    except (httpx.HTTPError, json.JSONDecodeError, KeyError, IndexError) as e:
-        rec.success, rec.error = False, f"{type(e).__name__}: {e}"[:500]
-        raise LLMUnavailable(f"gemini: {rec.error}") from e
-    finally:
-        rec.latency_ms = int((time.monotonic() - started) * 1000)
-        db.add(rec)
+        started = time.monotonic()
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        headers = {"x-goog-api-key": s.gemini_api_key}
+        wait = timeout or s.research_timeout_seconds
+        try:
+            r = httpx.post(url, headers=headers, json=body, timeout=wait)
+            if r.status_code == 400 and search:
+                # Some models refuse JSON mode together with tools: ask for JSON in text instead.
+                body["generationConfig"].pop("responseMimeType")
+                r = httpx.post(url, headers=headers, json=body, timeout=wait)
+            if r.status_code in RETRYABLE:
+                raise httpx.HTTPStatusError(f"HTTP {r.status_code}", request=r.request, response=r)
+            r.raise_for_status()
+            out = r.json()
+            cand = out["candidates"][0]
+            text = "".join(p.get("text", "") for p in cand["content"]["parts"])
+            usage = out.get("usageMetadata", {})
+            rec.input_tokens = usage.get("promptTokenCount", 0)
+            rec.output_tokens = usage.get("candidatesTokenCount", 0)
+            chunks = cand.get("groundingMetadata", {}).get("groundingChunks", [])
+            sources = [
+                {"index": i, "url": c["web"].get("uri", ""), "title": c["web"].get("title", "")}
+                for i, c in enumerate(chunks)
+                if "web" in c
+            ]
+            return GeminiResult(_parse_json_text(text), model, sources)
+        except httpx.HTTPStatusError as e:
+            rec.success, rec.error = False, f"HTTP {e.response.status_code}"
+            errors.append(f"{model}: {rec.error}")
+            if e.response.status_code not in RETRYABLE:
+                break  # bad request/auth: another model will not help
+        except (httpx.TransportError, json.JSONDecodeError, KeyError, IndexError) as e:
+            rec.success, rec.error = False, f"{type(e).__name__}: {e}"[:500]
+            errors.append(f"{model}: {rec.error}")
+        finally:
+            rec.latency_ms = int((time.monotonic() - started) * 1000)
+            db.add(rec)
+    raise LLMUnavailable("gemini: " + "; ".join(errors))

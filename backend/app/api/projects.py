@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 from sqlalchemy import func, select
 
 from app import db as dbmod
@@ -61,6 +61,7 @@ class ProjectIn(BaseModel):
     start_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     end_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     brief: str = Field(default="", max_length=20000)
+    research_urls: list[HttpUrl] = Field(default_factory=list, max_length=8)
 
 
 class ProjectPatch(BaseModel):
@@ -72,6 +73,7 @@ class ProjectPatch(BaseModel):
     start_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     end_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     brief: str | None = Field(default=None, max_length=20000)
+    research_urls: list[HttpUrl] | None = Field(default=None, max_length=8)
 
 
 class ProjectOut(ORM):
@@ -84,6 +86,7 @@ class ProjectOut(ORM):
     start_date: str | None
     end_date: str | None
     brief: str
+    research_urls: list[str]
     status: str
     context: dict | None
     context_confirmed_at: datetime | None
@@ -485,7 +488,9 @@ def list_projects(ctx: AnyMember, include_deleted: bool = False):
 def create_project(body: ProjectIn, ctx: Marketing):
     if body.service_id:
         ctx.get(Service, body.service_id)
-    p = Project(workspace_id=ctx.ws_id, created_by=ctx.user.id, **body.model_dump())
+    data = body.model_dump()
+    data["research_urls"] = [str(u) for u in body.research_urls]
+    p = Project(workspace_id=ctx.ws_id, created_by=ctx.user.id, **data)
     ctx.db.add(p)
     ctx.db.flush()
     ctx.audit("project.created", "project", p.id)
@@ -505,6 +510,8 @@ def patch_project(project_id: uuid.UUID, body: ProjectPatch, ctx: Marketing):
     changes = body.model_dump(exclude_unset=True)
     if changes.get("service_id"):
         ctx.get(Service, changes["service_id"])
+    if changes.get("research_urls") is not None:
+        changes["research_urls"] = [str(u) for u in changes["research_urls"]]
     for k, v in changes.items():
         setattr(p, k, v)
     if p.status == "draft" and p.brief and p.service_id:

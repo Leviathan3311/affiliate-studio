@@ -407,6 +407,8 @@ class Project(IdMixin, Base):
     start_date: Mapped[str | None] = mapped_column(String(10))
     end_date: Mapped[str | None] = mapped_column(String(10))
     brief: Mapped[str] = mapped_column(Text, default="")
+    # Public pages to research: competitors, fanpages, articles (user-provided sources)
+    research_urls: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
     # Project Context (AI-extracted, user-confirmed): summary, key_facts[{fact, source}], ...
     context: Mapped[dict | None] = mapped_column(JSON)

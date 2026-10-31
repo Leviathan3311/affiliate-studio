@@ -1,0 +1,15 @@
+{
+  "id": "your-kaggle-username/growthpilot-generative-studio",
+  "title": "GrowthPilot Generative Studio",
+  "code_file": "nb1.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "your-kaggle-username/growthpilot-worker"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

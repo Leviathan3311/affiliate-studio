@@ -1,6 +1,7 @@
 import os
 
 os.environ.update(
+    GP_ENV_FILE="",
     DATABASE_URL="sqlite://",
     META_APP_SECRET="test-app-secret",
     META_DRY_RUN="true",

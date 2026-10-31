@@ -247,8 +247,22 @@ def test_project_to_kaggle_to_published_post(client, db, spa, gemini):
     assert db.get(PublishingJob, __import__("uuid").UUID(pj["id"])).status == "published"
 
 
-def test_research_demotes_claims_without_real_source(client, spa, gemini):
+def test_research_demotes_claims_without_real_source(client, spa, gemini, monkeypatch):
+    from app.ai import sources
+
+    page = {
+        "index": 0,
+        "url": "https://example.vn/spa-q3",
+        "title": "Spa Q3",
+        "text": "Đá nóng 590k",
+    }
+    monkeypatch.setattr(sources, "fetch_all", lambda urls: ([page], ["https://down.vn: 503"]))
     h, p = spa
+    client.patch(
+        f"/api/v1/projects/{p['id']}",
+        headers=h,
+        json={"research_urls": ["https://example.vn/spa-q3"]},
+    )
     art = client.post(
         f"/api/v1/projects/{p['id']}/research", headers=h, json={"mode": "standard"}
     ).json()
@@ -261,6 +275,22 @@ def test_research_demotes_claims_without_real_source(client, spa, gemini):
         }
     ]
     assert "(chưa có nguồn) 60% khách thích cuối tuần" in report["assumptions"]
+    assert report["source_mode"] == "provided_urls" and report["unreachable_sources"] == [
+        "https://down.vn: 503"
+    ]
+
+
+def test_research_url_fetch_blocks_private_addresses():
+    from app.ai.sources import BlockedURL, _check_public
+
+    for url in (
+        "http://127.0.0.1:8000/admin",
+        "http://169.254.169.254/latest/meta-data",
+        "file:///etc/passwd",
+        "http://localhost/",
+    ):
+        with pytest.raises(BlockedURL):
+            _check_public(url)
 
 
 def test_shorts_job_creates_one_artifact_per_clip(client, db, spa, gemini):

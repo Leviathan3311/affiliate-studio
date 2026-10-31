@@ -49,6 +49,19 @@ def exchange_code_for_pages(code: str) -> list[dict]:
         timeout=15,
     )
     r.raise_for_status()
+    short_token = r.json()["access_token"]
+    # Page tokens inherit the user token's lifetime: from a long-lived user token they never expire.
+    r = httpx.get(
+        _graph("oauth/access_token"),
+        params={
+            "grant_type": "fb_exchange_token",
+            "client_id": s.meta_app_id,
+            "client_secret": s.meta_app_secret,
+            "fb_exchange_token": short_token,
+        },
+        timeout=15,
+    )
+    r.raise_for_status()
     user_token = r.json()["access_token"]
     r = httpx.get(
         _graph("me/accounts"),

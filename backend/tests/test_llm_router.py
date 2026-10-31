@@ -49,3 +49,25 @@ def test_extract_prices():
     }
     # units must be whole words: "12 Trần Quốc Thảo" is an address, not 12 triệu
     assert extract_prices("Spa ở 12 Trần Quốc Thảo, 3 tầng") == set()
+
+
+def test_gemini_falls_back_when_primary_is_overloaded(db, monkeypatch):
+    import httpx as hx
+
+    s = get_settings()
+    monkeypatch.setattr(s, "gemini_api_key", "k")
+    called = []
+
+    def fake_post(url, headers, json, timeout):
+        model = url.split("/models/")[1].split(":")[0]
+        called.append(model)
+        req = hx.Request("POST", url)
+        if model == s.gemini_model:
+            return hx.Response(503, request=req, json={"error": {"message": "high demand"}})
+        body = {"candidates": [{"content": {"parts": [{"text": '{"ok": true}'}]}}]}
+        return hx.Response(200, request=req, json=body)
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    out = llm.gemini_json(db, system="s", parts=[{"text": "t"}], purpose="p", workspace_id=None)
+    assert out.data == {"ok": True} and out.model == s.gemini_fallback_models[0]
+    assert called == [s.gemini_model, s.gemini_fallback_models[0]]

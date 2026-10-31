@@ -1,10 +1,14 @@
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # GP_ENV_FILE="" disables .env (tests must never pick up real keys)
+    model_config = SettingsConfigDict(
+        env_file=os.environ.get("GP_ENV_FILE", ".env") or None, extra="ignore"
+    )
 
     env: str = "dev"
     database_url: str = "sqlite:///./growthpilot.db"
@@ -31,8 +35,14 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.8-flash"
     llm_timeout_seconds: float = 20.0
     # Stream 2 (research, scripts, viral cut): Gemini 3.8 Flash; deep research on 2.5 Pro
-    gemini_deep_model: str = "gemini-2.5-pro"
+    # 2.5 Pro is closed to new keys; 3.1 Pro needs billing and falls back to the chain below.
+    gemini_deep_model: str = "gemini-3.1-pro-preview"
+    # Tried in order when the primary is overloaded (503) or out of quota (429)
+    gemini_fallback_models: list[str] = ["gemini-3-flash-preview", "gemini-3.1-flash-lite"]
     research_timeout_seconds: float = 180.0
+    # Google Search grounding needs a billed Gemini key; without it research cites only
+    # the public URLs the user attached to the project (BRD MOD-03A MVP scope).
+    gemini_search: bool = False
 
     # Object storage (system design §1 rule 2: media never in the DB). Empty r2_* = local disk.
     r2_account_id: str = ""
