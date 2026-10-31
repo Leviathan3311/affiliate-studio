@@ -8,10 +8,10 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import meta
-from app.ai.engagement import analyze_conversation
+from app.ai.engagement_agent import analyze_conversation
 from app.ai.llm import LLMUnavailable
-from app.db import utcnow
+from app.core.db import utcnow
+from app.core.security import decrypt_secret
 from app.models import (
     LEAD_STATUSES,
     Brand,
@@ -28,8 +28,8 @@ from app.models import (
     WebhookEvent,
     Workspace,
 )
-from app.policy import POLICY_VERSION, ActiveHours, PolicyInput, evaluate
-from app.security import decrypt_secret
+from app.social import meta
+from app.social.policy import POLICY_VERSION, ActiveHours, PolicyInput, evaluate
 
 OPT_OUT = re.compile(
     r"\b(stop|unsubscribe)\b|dừng nhắn|ngừng nhắn|không nhận tin|h[uủ]y đăng ký|đừng nhắn",

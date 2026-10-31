@@ -13,11 +13,12 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
-from app import meta, worker
-from app.ai import engagement
+from app import worker
+from app.ai import engagement_agent
 from app.ai.llm import LLMResult
-from app.config import get_settings
+from app.core.config import get_settings
 from app.main import app
+from app.social import meta
 
 EMAIL, PASSWORD = "demo@growthpilot.vn", "demo12345"
 PAGE_ID = "100200300400"
@@ -85,7 +86,7 @@ def fake_llm(db, *, system, user, purpose, workspace_id, route=("groq", "gemini"
 def main() -> None:
     s = get_settings()
     if not (s.groq_api_key or s.gemini_api_key):
-        engagement.complete_json = fake_llm  # demo only
+        engagement_agent.complete_json = fake_llm  # demo only
     # Meta profile lookup is off in dry-run mode; give the demo customers names.
     names = {
         "psid-lan": "Nguyễn Thị Lan",

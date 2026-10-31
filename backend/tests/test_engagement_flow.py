@@ -3,10 +3,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 
-from app.ai import engagement as agent_mod
+from app.ai import engagement_agent as agent_mod
 from app.ai.llm import LLMResult, LLMUnavailable, mask_pii
-from app.engagement import ingest_event, run_agent
 from app.models import Conversation, Customer, Lead, Message, Notification, WebhookEvent
+from app.social.engagement import ingest_event, run_agent
 from tests.conftest import connect_page, messenger_payload, post_webhook, signup
 
 PAGE = "1234567890"

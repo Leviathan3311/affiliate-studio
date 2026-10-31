@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
-from app.config import get_settings
+from app.core.config import get_settings
 
 
 def _r2_enabled() -> bool:
@@ -35,7 +35,7 @@ def _s3():
     )
 
 
-# --- local backend: HMAC-signed URLs served by app.api.files ---
+# --- local backend: HMAC-signed URLs served by app.core.files ---
 
 
 def _sign(method: str, key: str, exp: int) -> str:

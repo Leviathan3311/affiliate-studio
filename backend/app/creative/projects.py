@@ -11,13 +11,14 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 from sqlalchemy import func, select
 
-from app import db as dbmod
-from app import media, storage
-from app.ai import creative
+from app.ai import agents
 from app.ai.llm import LLMUnavailable
-from app.config import get_settings
-from app.db import utcnow
-from app.deps import AnyMember, Marketing
+from app.core import db as dbmod
+from app.core import storage
+from app.core.config import get_settings
+from app.core.db import utcnow
+from app.core.deps import AnyMember, Marketing
+from app.creative import media
 from app.models import (
     INPUT_ROLES,
     Artifact,
@@ -382,20 +383,20 @@ def _in_background(fn, *args) -> None:
 
 def task_context(db, project_id: uuid.UUID) -> None:
     p = db.get(Project, project_id)
-    p.context = creative.build_project_context(db, p).model_dump()
+    p.context = agents.build_project_context(db, p).model_dump()
     p.context_confirmed_at = None
 
 
 def task_research(db, project_id: uuid.UUID, art_id: uuid.UUID, mode: str) -> None:
     p, art = db.get(Project, project_id), db.get(Artifact, art_id)
-    report, model = creative.run_research(db, p, mode)
+    report, model = agents.run_research(db, p, mode)
     _add_version(db, art, report, "ai", model=model)
     art.status = "ready"
 
 
 def task_scripts(db, project_id: uuid.UUID, art_ids: list[uuid.UUID], instruction: str) -> None:
     p = db.get(Project, project_id)
-    variants, model = creative.generate_scripts(
+    variants, model = agents.generate_scripts(
         db, p, _latest_research(db, project_id), len(art_ids), instruction
     )
     arts = [db.get(Artifact, i) for i in art_ids]
@@ -410,7 +411,7 @@ def task_scripts(db, project_id: uuid.UUID, art_ids: list[uuid.UUID], instructio
 def task_revise(db, art_id: uuid.UUID, instruction: str, user_id: uuid.UUID | None) -> None:
     art = db.get(Artifact, art_id)
     current = db.get(ArtifactVersion, art.current_version_id)
-    revised, model = creative.revise_script(
+    revised, model = agents.revise_script(
         db, db.get(Project, art.project_id), current.content, instruction
     )
     revised["instruction"] = instruction
@@ -678,7 +679,7 @@ def build_context(project_id: uuid.UUID, ctx: Marketing, bg: BackgroundTasks):
 @router.patch("/projects/{project_id}/context", response_model=ProjectOut)
 def patch_context(project_id: uuid.UUID, body: ContextPatch, ctx: Marketing):
     p = _project(ctx, project_id)
-    p.context = creative.ProjectContext.model_validate(body.context).model_dump()
+    p.context = agents.ProjectContext.model_validate(body.context).model_dump()
     p.context_confirmed_at = utcnow() if body.confirm else None
     ctx.audit("project.context_updated", "project", p.id, confirmed=body.confirm)
     ctx.db.commit()
@@ -737,8 +738,8 @@ def save_version(artifact_id: uuid.UUID, body: ScriptEdit, ctx: Marketing):
     a = _artifact(ctx, artifact_id)
     if a.kind != "script":
         raise HTTPException(status.HTTP_409_CONFLICT, "Chỉ sửa tay được kịch bản")
-    content = creative.ScriptVariant.model_validate(body.content).model_dump()
-    content["flags"] = creative._script_flags(ctx.db, ctx.db.get(Project, a.project_id), content)
+    content = agents.ScriptVariant.model_validate(body.content).model_dump()
+    content["flags"] = agents._script_flags(ctx.db, ctx.db.get(Project, a.project_id), content)
     _add_version(ctx.db, a, content, "user", user_id=ctx.user.id)
     ctx.db.commit()
     return _artifact_out(ctx.db, a)
@@ -911,7 +912,7 @@ def chat(project_id: uuid.UUID, body: ChatIn, ctx: Marketing, bg: BackgroundTask
     )
     db.add(user_msg)
     try:
-        out = creative.orchestrate(db, p, history, body.message, selected)
+        out = agents.orchestrate(db, p, history, body.message, selected)
     except LLMUnavailable as e:
         db.commit()
         raise HTTPException(

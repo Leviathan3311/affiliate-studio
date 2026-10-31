@@ -7,8 +7,8 @@ import jwt
 from cryptography.fernet import Fernet
 from pwdlib import PasswordHash
 
-from app.config import get_settings
-from app.db import utcnow
+from app.core.config import get_settings
+from app.core.db import utcnow
 
 _hasher = PasswordHash.recommended()
 

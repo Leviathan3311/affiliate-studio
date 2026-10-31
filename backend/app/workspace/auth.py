@@ -4,9 +4,9 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
 
-from app.deps import DB, CurrentUser
+from app.core.deps import DB, CurrentUser
+from app.core.security import create_token, hash_password, verify_password
 from app.models import User, Workspace, WorkspaceMember
-from app.security import create_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

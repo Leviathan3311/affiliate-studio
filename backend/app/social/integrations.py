@@ -13,11 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app import meta
-from app.config import get_settings
-from app.deps import DB, Admin, AnyMember
+from app.core.config import get_settings
+from app.core.deps import DB, Admin, AnyMember
+from app.core.security import create_token, decode_token, encrypt_secret, verify_meta_signature
 from app.models import AuditLog, SocialAccount, WebhookEvent
-from app.security import create_token, decode_token, encrypt_secret, verify_meta_signature
+from app.social import meta
 
 log = logging.getLogger("growthpilot.meta")
 router = APIRouter(tags=["integrations"])

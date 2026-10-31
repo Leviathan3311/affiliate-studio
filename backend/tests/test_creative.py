@@ -3,11 +3,11 @@ from urllib.parse import urlsplit
 import pytest
 from sqlalchemy import select
 
-from app import publishing
-from app.ai import creative
-from app.ai.composer import ResolvedStyle, compose, normalize_blocks
+from app.ai import agents
 from app.ai.llm import GeminiResult
-from app.config import get_settings
+from app.core.config import get_settings
+from app.creative import publishing
+from app.creative.composer import ResolvedStyle, compose, normalize_blocks
 from app.models import MediaJob, PublishingJob
 from tests.conftest import connect_page, signup
 
@@ -71,7 +71,7 @@ def gemini(monkeypatch):
             )
         raise AssertionError(purpose)
 
-    monkeypatch.setattr(creative, "gemini_json", fake)
+    monkeypatch.setattr(agents, "gemini_json", fake)
     monkeypatch.setattr(get_settings(), "gemini_api_key", "test")
     monkeypatch.setattr(get_settings(), "media_worker_token", "worker-secret")
     return calls
@@ -338,8 +338,8 @@ def test_shorts_job_creates_one_artifact_per_clip(client, db, spa, gemini):
 def test_stale_kaggle_job_is_requeued(client, db, spa, gemini):
     from datetime import timedelta
 
-    from app.db import utcnow
-    from app.media import requeue_stale
+    from app.core.db import utcnow
+    from app.creative.media import requeue_stale
 
     h, p = spa
     client.post(f"/api/v1/projects/{p['id']}/scripts", headers=h, json={"count": 1})

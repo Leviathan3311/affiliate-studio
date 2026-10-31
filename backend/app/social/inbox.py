@@ -8,10 +8,10 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 
-from app.db import utcnow
-from app.deps import Sales
-from app.engagement import run_agent, send_outbound
+from app.core.db import utcnow
+from app.core.deps import Sales
 from app.models import Conversation, Customer, Message, PolicyDecision, WorkspaceMember
+from app.social.engagement import run_agent, send_outbound
 
 router = APIRouter(prefix="/conversations", tags=["inbox"])
 

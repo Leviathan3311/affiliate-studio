@@ -8,9 +8,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.core.db import get_db
+from app.core.security import decode_token
 from app.models import AuditLog, User, Workspace, WorkspaceMember
-from app.security import decode_token
 
 DB = Annotated[Session, Depends(get_db)]
 _bearer = HTTPBearer(auto_error=False)

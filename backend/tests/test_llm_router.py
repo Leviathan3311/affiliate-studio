@@ -2,8 +2,8 @@ import httpx
 import pytest
 
 from app.ai import llm
-from app.ai.engagement import extract_prices
-from app.config import get_settings
+from app.ai.engagement_agent import extract_prices
+from app.core.config import get_settings
 
 
 @pytest.fixture

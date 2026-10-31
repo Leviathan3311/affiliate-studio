@@ -12,11 +12,11 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import storage
-from app.ai.composer import compose, resolve_style
-from app.ai.creative import brand_facts
-from app.config import get_settings
-from app.db import utcnow
+from app.ai.agents import brand_facts
+from app.core import storage
+from app.core.config import get_settings
+from app.core.db import utcnow
+from app.creative.composer import compose, resolve_style
 from app.models import (
     Artifact,
     ArtifactVersion,

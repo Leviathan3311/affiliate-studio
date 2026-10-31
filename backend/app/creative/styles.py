@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, select
 
-from app.ai.composer import (
+from app.core.deps import Admin, AnyMember, Marketing
+from app.creative.composer import (
     MODALITIES,
     ResolvedStyle,
     compose,
@@ -17,7 +18,6 @@ from app.ai.composer import (
     normalize_blocks,
     resolve_style,
 )
-from app.deps import Admin, AnyMember, Marketing
 from app.models import Project, StyleAssignment, StylePack, StylePackVersion
 
 router = APIRouter(tags=["styles"])

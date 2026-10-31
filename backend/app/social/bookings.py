@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 
-from app.deps import Sales
+from app.core.deps import Sales
 from app.models import (
     BOOKING_STATUSES,
     Booking,

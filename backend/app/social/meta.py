@@ -6,8 +6,8 @@ from urllib.parse import urlencode
 
 import httpx
 
-from app.config import get_settings
-from app.db import utcnow
+from app.core.config import get_settings
+from app.core.db import utcnow
 
 SCOPES = (
     "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement,pages_manage_posts"

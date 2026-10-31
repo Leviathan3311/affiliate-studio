@@ -13,13 +13,13 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.integrations import accept_webhook
-from app.config import get_settings
-from app.db import SessionLocal, utcnow
-from app.engagement import ingest_event, run_agent
-from app.media import requeue_stale
+from app.core.config import get_settings
+from app.core.db import SessionLocal, utcnow
+from app.creative.media import requeue_stale
+from app.creative.publishing import due_jobs, run_job
 from app.models import Conversation, WebhookEvent
-from app.publishing import due_jobs, run_job
+from app.social.engagement import ingest_event, run_agent
+from app.social.integrations import accept_webhook
 
 log = logging.getLogger("growthpilot.worker")
 MAX_ATTEMPTS = 5

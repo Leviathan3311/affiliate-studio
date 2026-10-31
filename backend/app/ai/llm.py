@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import httpx
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
+from app.core.config import get_settings
 from app.models import AIUsageRecord
 
 _PHONE = re.compile(r"(?<!\d)(?:\+?84|0)(?:[\s.\-]?\d){8,10}(?!\d)")

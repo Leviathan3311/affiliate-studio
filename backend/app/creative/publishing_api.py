@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
-from app.db import utcnow
-from app.deps import Marketing
+from app.core.db import utcnow
+from app.core.deps import Marketing
 from app.models import Artifact, ArtifactVersion, PublishingJob, SocialAccount, StorageObject
 
 router = APIRouter(prefix="/publishing-jobs", tags=["publishing"])

@@ -7,7 +7,7 @@ from sqlalchemy import DateTime, Uuid, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.types import TypeDecorator
 
-from app.config import get_settings
+from app.core.config import get_settings
 
 
 def utcnow() -> datetime:

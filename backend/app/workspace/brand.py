@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.deps import AnyMember, Marketing
+from app.core.deps import AnyMember, Marketing
 from app.models import Branch, Brand, KnowledgeDocument, Service
 
 router = APIRouter(tags=["brand"])

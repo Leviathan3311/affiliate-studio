@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator
 from sqlalchemy import func, select
 
-from app.deps import DB, Admin, AnyMember, CurrentUser
+from app.core.deps import DB, Admin, AnyMember, CurrentUser
 from app.models import ROLES, Brand, User, Workspace, WorkspaceMember
 
 router = APIRouter(tags=["workspaces"])

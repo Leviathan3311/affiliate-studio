@@ -8,8 +8,8 @@ from fastapi import APIRouter
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 from sqlalchemy import func, select
 
-from app.db import utcnow
-from app.deps import AnyMember
+from app.core.db import utcnow
+from app.core.deps import AnyMember
 from app.models import Booking, Conversation, Lead, Message, Notification
 
 router = APIRouter(tags=["dashboard"])

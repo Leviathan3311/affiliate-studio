@@ -18,8 +18,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app import db as app_db
-from app.db import Base
+from app.core import db as app_db
+from app.core.db import Base
 from app.main import app
 
 
@@ -44,7 +44,7 @@ def db(engine):
 
 @pytest.fixture
 def client(engine, monkeypatch, tmp_path):
-    from app.config import get_settings
+    from app.core.config import get_settings
 
     Session = sessionmaker(bind=engine, expire_on_commit=False)
     monkeypatch.setattr(app_db, "SessionLocal", Session)  # background tasks + worker

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from app.policy import ActiveHours, PolicyInput, evaluate
+from app.social.policy import ActiveHours, PolicyInput, evaluate
 
 HOURS = ActiveHours("Asia/Ho_Chi_Minh", "08:00", "22:00")
 # 10:00 and 23:30 Vietnam time

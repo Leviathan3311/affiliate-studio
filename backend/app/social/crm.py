@@ -8,9 +8,8 @@ from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import func, or_, select
 
-from app.db import utcnow
-from app.deps import Sales
-from app.engagement import is_opted_out
+from app.core.db import utcnow
+from app.core.deps import Sales
 from app.models import (
     LEAD_STATUSES,
     Booking,
@@ -21,6 +20,7 @@ from app.models import (
     Service,
     Suppression,
 )
+from app.social.engagement import is_opted_out
 
 router = APIRouter(tags=["crm"])
 LeadStatus = Literal[LEAD_STATUSES]  # type: ignore[valid-type]

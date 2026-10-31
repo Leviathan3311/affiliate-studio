@@ -7,7 +7,7 @@ from decimal import Decimal
 from sqlalchemy import JSON, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db import Base, IdMixin
+from app.core.db import Base, IdMixin
 
 ROLES = ("owner", "admin", "marketing", "sales", "branch_manager")
 INTENTS = (

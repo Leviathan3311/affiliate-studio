@@ -7,10 +7,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app import media
-from app.config import get_settings
-from app.db import utcnow
-from app.deps import DB
+from app.core.config import get_settings
+from app.core.db import utcnow
+from app.core.deps import DB
+from app.creative import media
 from app.models import MediaJob
 
 router = APIRouter(prefix="/worker", tags=["media-worker"])

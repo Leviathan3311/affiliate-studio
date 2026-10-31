@@ -1,6 +1,6 @@
 """Customer Engagement Agent (BRD MOD-07A.B, P0 'suggest-only').
 
-The agent only analyses and drafts. Sending is decided by app.policy and app.inbox.
+The agent only analyses and drafts. Sending is decided by app.social.policy and app.inbox.
 """
 
 import re

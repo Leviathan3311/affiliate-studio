@@ -12,9 +12,9 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import storage
-from app.ai.engagement import build_knowledge, extract_prices
+from app.ai.engagement_agent import build_knowledge, extract_prices
 from app.ai.llm import gemini_json
+from app.core import storage
 from app.models import Brand, Project, ProjectInput, Service, StorageObject
 
 INLINE_LIMIT = 15 * 1024 * 1024  # Gemini inline_data request cap is ~20MB
@@ -174,7 +174,7 @@ def run_research(db: Session, project: Project, mode: str) -> tuple[dict, str]:
     (GEMINI_SEARCH=true), otherwise the public URLs attached to the project."""
     from app.ai.llm import LLMUnavailable
     from app.ai.sources import fetch_all
-    from app.config import get_settings
+    from app.core.config import get_settings
 
     pages, failed = fetch_all(project.research_urls or [])
     brief = {"text": project_brief(db, project)}

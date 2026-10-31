@@ -3,8 +3,8 @@
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import FileResponse
 
-from app.config import get_settings
-from app.storage import local_path, verify_local
+from app.core.config import get_settings
+from app.core.storage import local_path, verify_local
 
 router = APIRouter(prefix="/files", tags=["files"])
 
