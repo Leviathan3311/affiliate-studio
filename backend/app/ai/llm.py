@@ -14,6 +14,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.observability import span
 from app.models import AIUsageRecord
 
 _PHONE = re.compile(r"(?<!\d)(?:\+?84|0)(?:[\s.\-]?\d){8,10}(?!\d)")
@@ -93,6 +94,7 @@ def complete_json(
     purpose: str,
     workspace_id: uuid.UUID | None,
     route: tuple[str, ...] = ("groq", "gemini"),
+    langfuse_prompt=None,
 ) -> LLMResult:
     """Try providers in order; fall back on 429/5xx/timeout/bad JSON. Logs every attempt."""
     s = get_settings()
@@ -107,16 +109,26 @@ def complete_json(
         rec = AIUsageRecord(
             workspace_id=workspace_id, purpose=purpose, provider=name, model=model(s)
         )
-        try:
-            data, tin, tout = call(system, user)
-            rec.input_tokens, rec.output_tokens = tin, tout
-            return LLMResult(data, name, model(s))
-        except (httpx.HTTPError, json.JSONDecodeError, KeyError, IndexError) as e:
-            rec.success, rec.error = False, f"{type(e).__name__}: {e}"[:500]
-            errors.append(f"{name}: {rec.error}")
-        finally:
-            rec.latency_ms = int((time.monotonic() - started) * 1000)
-            db.add(rec)
+        with span(
+            f"llm.{purpose}",
+            as_type="generation",
+            model=model(s),
+            prompt=langfuse_prompt,
+            input=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            metadata={"provider": name},
+        ) as gen:
+            try:
+                data, tin, tout = call(system, user)
+                rec.input_tokens, rec.output_tokens = tin, tout
+                gen.update(output=data, usage_details={"input": tin, "output": tout})
+                return LLMResult(data, name, model(s))
+            except (httpx.HTTPError, json.JSONDecodeError, KeyError, IndexError) as e:
+                rec.success, rec.error = False, f"{type(e).__name__}: {e}"[:500]
+                errors.append(f"{name}: {rec.error}")
+                gen.update(level="ERROR", status_message=rec.error)
+            finally:
+                rec.latency_ms = int((time.monotonic() - started) * 1000)
+                db.add(rec)
     raise LLMUnavailable("; ".join(errors) or "no providers")
 
 
@@ -175,6 +187,14 @@ def gemini_json(
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         headers = {"x-goog-api-key": s.gemini_api_key}
         wait = timeout or s.research_timeout_seconds
+        gen_ctx = span(
+            f"llm.{purpose}",
+            as_type="generation",
+            model=model,
+            input={"system": system, "parts": [p.get("text", "<file>") for p in parts]},
+            metadata={"provider": "gemini", "search": search},
+        )
+        gen = gen_ctx.__enter__()
         try:
             r = httpx.post(url, headers=headers, json=body, timeout=wait)
             if r.status_code == 400 and search:
@@ -196,7 +216,11 @@ def gemini_json(
                 for i, c in enumerate(chunks)
                 if "web" in c
             ]
-            return GeminiResult(_parse_json_text(text), model, sources)
+            data = _parse_json_text(text)
+            gen.update(
+                output=data, usage_details={"input": rec.input_tokens, "output": rec.output_tokens}
+            )
+            return GeminiResult(data, model, sources)
         except httpx.HTTPStatusError as e:
             rec.success, rec.error = False, f"HTTP {e.response.status_code}"
             errors.append(f"{model}: {rec.error}")
@@ -208,4 +232,7 @@ def gemini_json(
         finally:
             rec.latency_ms = int((time.monotonic() - started) * 1000)
             db.add(rec)
+            if not rec.success:
+                gen.update(level="ERROR", status_message=rec.error)
+            gen_ctx.__exit__(None, None, None)
     raise LLMUnavailable("gemini: " + "; ".join(errors))

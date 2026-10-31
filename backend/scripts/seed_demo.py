@@ -64,7 +64,7 @@ MESSAGES = [
 ]
 
 
-def fake_llm(db, *, system, user, purpose, workspace_id, route=("groq", "gemini")):
+def fake_llm(db, *, system, user, purpose, workspace_id, **_):
     for psid, data in CANNED.items():
         if any(text in user for p, text, _ in MESSAGES if p == psid):
             return LLMResult(dict(data), "demo", "canned")

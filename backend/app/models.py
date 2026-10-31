@@ -607,3 +607,14 @@ class PublishingJob(IdMixin, Base):
     approved_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
+
+
+class KnowledgeSyncState(IdMixin, Base):
+    """What LightRAG has indexed per workspace document (content hash), so only edits re-index."""
+
+    __tablename__ = "knowledge_sync_state"
+    __table_args__ = (UniqueConstraint("workspace_id", "doc_id"),)
+    workspace_id: Mapped[uuid.UUID] = ws_fk()
+    doc_id: Mapped[str] = mapped_column(String(80))
+    content_hash: Mapped[str] = mapped_column(String(64))
+    synced_at: Mapped[datetime | None]

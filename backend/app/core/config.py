@@ -43,6 +43,18 @@ class Settings(BaseSettings):
     # Google Search grounding needs a billed Gemini key; without it research cites only
     # the public URLs the user attached to the project (BRD MOD-03A MVP scope).
     gemini_search: bool = False
+    gemini_embedding_model: str = "gemini-embedding-2"
+
+    # LightRAG knowledge layer (system design §3.2); needs Postgres + Gemini, else keyword fallback
+    lightrag_enabled: bool = True
+    # Supabase CA file (Project Settings -> Database -> SSL) for verify-full TLS from LightRAG
+    postgres_ssl_root_cert: str = ""
+    knowledge_sync_seconds: int = 120
+
+    # Langfuse Cloud (system design §3.3); empty keys = tracing off
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "https://cloud.langfuse.com"
 
     # Object storage (system design §1 rule 2: media never in the DB). Empty r2_* = local disk.
     r2_account_id: str = ""

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.ai.engagement_agent import analyze_conversation
 from app.ai.llm import LLMUnavailable
 from app.core.db import utcnow
+from app.core.observability import trace
 from app.core.security import decrypt_secret
 from app.models import (
     LEAD_STATUSES,
@@ -248,9 +249,25 @@ def run_agent(db: Session, conv: Conversation, now: datetime | None = None) -> N
     now = now or utcnow()
     conv.needs_ai_at = None
     ws = db.get(Workspace, conv.workspace_id)
-    try:
-        out = analyze_conversation(db, conv, brand_name(db, ws))
-    except LLMUnavailable:
+    # One Langfuse trace per reply: retrieval -> prompt assembly -> generation (§3.3)
+    with trace(
+        "customer-reply",
+        session_id=str(conv.id),
+        user_id=str(conv.customer_id),
+        workspace=str(ws.id),
+    ) as t:
+        try:
+            out = analyze_conversation(db, conv, brand_name(db, ws))
+        except LLMUnavailable:
+            out = False
+        t.update(
+            output={
+                "intent": conv.ai_intent,
+                "needs_human": conv.ai_needs_human,
+                "flags": conv.ai_flags,
+            }
+        )
+    if out is False:
         conv.ai_needs_human, conv.ai_flags = True, ["llm_unavailable"]
         conv.ai_updated_at = now
         return

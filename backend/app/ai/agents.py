@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.engagement_agent import build_knowledge, extract_prices
+from app.ai.knowledge import build_context, extract_prices, sql_facts
 from app.ai.llm import gemini_json
 from app.core import storage
 from app.models import Brand, Project, ProjectInput, Service, StorageObject
@@ -37,7 +37,7 @@ DỮ LIỆU THƯƠNG HIỆU; nếu thiếu thì ghi vào "missing"/"unknowns".
 
 def project_brief(db: Session, project: Project) -> str:
     service = db.get(Service, project.service_id) if project.service_id else None
-    knowledge, _ = build_knowledge(db, project.workspace_id, f"{project.name} {project.brief}")
+    knowledge, _ = build_context(db, project.workspace_id, f"{project.name} {project.brief}")
     ctx = project.context or {}
     lines = [
         f"Dự án: {project.name}",
@@ -284,7 +284,7 @@ music_mood: tag nhạc nền tiếng Anh. caption/hook/cta/on_screen_text: tiế
 
 
 def _script_flags(db: Session, project: Project, variant: dict) -> list[str]:
-    _, allowed = build_knowledge(db, project.workspace_id, "")
+    _, allowed = sql_facts(db, project.workspace_id)
     text = " ".join(
         [
             variant["hook"],

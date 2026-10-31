@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from app.ai import llm
-from app.ai.engagement_agent import extract_prices
+from app.ai.knowledge import extract_prices
 from app.core.config import get_settings
 
 

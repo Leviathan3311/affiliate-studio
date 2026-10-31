@@ -31,7 +31,7 @@ def llm(monkeypatch):
             "reason": "hỏi giá và đặt lịch",
         }
 
-    def fake(db, *, system, user, purpose, workspace_id, route=("groq", "gemini")):
+    def fake(db, *, system, user, purpose, workspace_id, **_):
         Fake.calls.append(user)
         return LLMResult(dict(Fake.data), "fake", "fake-model")
 

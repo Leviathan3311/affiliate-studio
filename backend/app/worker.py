@@ -13,11 +13,13 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai import knowledge
 from app.core.config import get_settings
 from app.core.db import SessionLocal, utcnow
+from app.core.observability import flush
 from app.creative.media import requeue_stale
 from app.creative.publishing import due_jobs, run_job
-from app.models import Conversation, WebhookEvent
+from app.models import Conversation, WebhookEvent, Workspace
 from app.social.engagement import ingest_event, run_agent
 from app.social.integrations import accept_webhook
 
@@ -114,6 +116,32 @@ def drain_edge_queue(db: Session) -> int:
     return n
 
 
+_last_knowledge_sync = 0.0
+
+
+def sync_knowledge(db: Session) -> int:
+    """Re-index changed spa documents into LightRAG (only when content hashes differ)."""
+    global _last_knowledge_sync
+    if (
+        not knowledge.enabled()
+        or time.monotonic() - _last_knowledge_sync < get_settings().knowledge_sync_seconds
+    ):
+        return 0
+    _last_knowledge_sync = time.monotonic()
+    done = 0
+    for ws_id in db.scalars(select(Workspace.id)).all():
+        try:
+            res = knowledge.sync(db, ws_id)
+            db.commit()
+            done += res.get("changed", 0) + res.get("removed", 0)
+            if res.get("changed") or res.get("removed"):
+                log.info("knowledge sync %s: %s", ws_id, res)
+        except Exception:
+            db.rollback()
+            log.exception("knowledge sync failed for %s", ws_id)
+    return done
+
+
 def run_once() -> int:
     with SessionLocal() as db:
         requeue_stale(db)
@@ -133,6 +161,7 @@ def main() -> None:
     while True:
         if run_once() == 0:
             time.sleep(poll)
+        flush()
 
 
 if __name__ == "__main__":
