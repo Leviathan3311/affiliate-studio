@@ -19,3 +19,4 @@ next-env.d.ts
 # Local tooling
 .taste-skill/
 .claude/
+notebooks/kaggle/dist/
