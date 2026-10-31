@@ -84,3 +84,50 @@ export const POLICY_REASON: Record<string, string> = {
   quiet_hours: "Ngoài giờ hoạt động — sẽ xử lý vào đầu ca",
   unknown_purpose: "Mục đích gửi không hợp lệ",
 };
+
+export const OBJECTIVE: Record<string, string> = {
+  promote_service: "Quảng bá dịch vụ",
+  opening: "Khai trương",
+  seasonal_offer: "Ưu đãi theo mùa",
+  new_customers: "Thu hút khách mới",
+  retention: "Kéo khách cũ quay lại",
+};
+
+export const ARTIFACT_STATUS: Record<string, string> = {
+  generating: "Đang tạo",
+  ready: "Sẵn sàng xem",
+  selected: "Đã chọn",
+  approved: "Đã duyệt",
+  failed: "Lỗi",
+  archived: "Đã lưu trữ",
+};
+
+export const INPUT_ROLE: Record<string, string> = {
+  brief: "Brief / tài liệu",
+  logo: "Logo",
+  product: "Ảnh sản phẩm",
+  facility: "Ảnh cơ sở",
+  staff: "Nhân viên / người mẫu",
+  reference: "Ảnh tham chiếu",
+  source_video: "Video nguồn",
+  other: "Khác",
+};
+
+export const JOB_STAGE: Record<string, string> = {
+  queued: "Chờ GPU Kaggle",
+  running: "Đang xử lý",
+  succeeded: "Hoàn tất",
+  failed: "Lỗi",
+  cancelled: "Đã huỷ",
+};
+
+export const PUBLISH_STATUS: Record<string, string> = {
+  scheduled: "Đã lên lịch",
+  publishing: "Đang đăng",
+  published: "Đã đăng",
+  failed: "Lỗi",
+  cancelled: "Đã huỷ",
+};
+
+export const bytes = (n: number) =>
+  n < 1024 ** 2 ? `${Math.max(1, Math.round(n / 1024))} KB` : n < 1024 ** 3 ? `${(n / 1024 ** 2).toFixed(1)} MB` : `${(n / 1024 ** 3).toFixed(2)} GB`;

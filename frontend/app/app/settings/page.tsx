@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent, type ReactNode } from "react";
+import { StyleLibrary } from "@/components/style-library";
 import { Button, Empty, ErrorNote, Field, PageTitle, Panel, Pill, Select, Skeleton } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, ApiError, API_URL, useApi } from "@/lib/api";
@@ -13,6 +14,7 @@ const TABS = [
   { id: "services", label: "Dịch vụ & giá" },
   { id: "faq", label: "FAQ & chính sách" },
   { id: "branches", label: "Chi nhánh" },
+  { id: "styles", label: "Style tạo ảnh/video" },
   { id: "integrations", label: "Facebook Page" },
   { id: "ai", label: "Giờ trực AI" },
   { id: "members", label: "Thành viên" },
@@ -53,6 +55,7 @@ function Settings() {
       {tab === "services" && <ServicesTab />}
       {tab === "faq" && <KnowledgeTab />}
       {tab === "branches" && <BranchesTab />}
+      {tab === "styles" && <StyleLibrary />}
       {tab === "integrations" && <IntegrationsTab connected={params.get("connected")} metaError={params.get("meta_error")} />}
       {tab === "ai" && <AiTab />}
       {tab === "members" && <MembersTab />}

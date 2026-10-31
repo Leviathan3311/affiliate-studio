@@ -243,3 +243,214 @@ export interface Today {
   queued_for_morning: number;
   next_batch_at: string | null;
 }
+
+// ---------- Project Creative Workspace (backend app/creative) ----------
+
+export type ArtifactKind = "research" | "script" | "image" | "video" | "short";
+export type ArtifactStatus = "generating" | "ready" | "selected" | "approved" | "failed" | "archived";
+
+export interface ProjectContext {
+  summary: string;
+  services: string[];
+  key_messages: string[];
+  brand_voice: string;
+  audience: string;
+  key_facts: { fact: string; source: string }[];
+  constraints: string[];
+  missing: string[];
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  objective: string;
+  service_id: string | null;
+  audience: string;
+  location: string;
+  start_date: string | null;
+  end_date: string | null;
+  brief: string;
+  research_urls: string[];
+  status: "draft" | "active" | "archived" | "deleted";
+  context: ProjectContext | null;
+  context_confirmed_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  counts: Partial<Record<ArtifactKind, number>>;
+  storage_bytes: number;
+  cover_url: string | null;
+}
+
+export interface ProjectInput {
+  id: string;
+  role: string;
+  title: string;
+  description: string;
+  usage_confirmed: boolean;
+  preserve: boolean;
+  filename: string;
+  mime_type: string;
+  byte_size: number;
+  url: string;
+  created_at: string;
+}
+
+export interface Shot {
+  description: string;
+  visual_prompt: string;
+  motion: string;
+  on_screen_text: string;
+  sfx: string;
+  duration_seconds: number;
+}
+
+export interface Script {
+  title: string;
+  angle: string;
+  insight: string;
+  hook: string;
+  key_message: string;
+  cta: string;
+  duration_seconds: number;
+  voiceover: string;
+  music_mood: string;
+  caption: string;
+  hashtags: string[];
+  shots: Shot[];
+  flags?: string[];
+  instruction?: string;
+}
+
+export interface ResearchReport {
+  research_summary: string;
+  target_audience: string[];
+  customer_pain_points: string[];
+  customer_questions: string[];
+  competitor_insights: string[];
+  social_trends: string[];
+  content_opportunities: string[];
+  evidence: { claim: string; source_url: string; source_title: string }[];
+  assumptions: string[];
+  counterexamples: string[];
+  risks: string[];
+  unknowns: string[];
+  confidence: "low" | "medium" | "high";
+  sources: { index: number; url: string; title: string }[];
+  source_mode: "provided_urls" | "google_search";
+  unreachable_sources: string[];
+  mode: string;
+}
+
+export interface ArtifactVersion {
+  id: string;
+  version_number: number;
+  parent_version_id: string | null;
+  content: Record<string, unknown>;
+  actor: string;
+  provider: string | null;
+  model: string | null;
+  media_job_id: string | null;
+  created_at: string;
+  url: string | null;
+  mime_type: string | null;
+  byte_size: number | null;
+}
+
+export interface Artifact {
+  id: string;
+  kind: ArtifactKind;
+  display_name: string;
+  variant_key: string | null;
+  status: ArtifactStatus;
+  pinned: boolean;
+  error: string | null;
+  created_at: string;
+  updated_at: string | null;
+  current: ArtifactVersion | null;
+  version_count: number;
+}
+
+export interface ArtifactDetail extends Artifact {
+  versions: ArtifactVersion[];
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  artifact_id: string | null;
+  action: { type: string; artifact_ids?: string[]; script_artifact_id?: string } | null;
+  created_at: string;
+}
+
+export interface MediaJob {
+  id: string;
+  kind: "studio" | "shorts";
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  stage: string;
+  progress: number;
+  attempts: number;
+  error: string | null;
+  created_at: string;
+  finished_at: string | null;
+  prompt_snapshot: Record<string, unknown>;
+}
+
+export interface StyleBlock {
+  id?: string;
+  name: string;
+  category: string;
+  content: string;
+  priority: number;
+  applies_to: ("image" | "video" | "audio")[];
+  enabled: boolean;
+}
+
+export interface StylePack {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  is_preset: boolean;
+  version_id: string | null;
+  version_number: number | null;
+  blocks: StyleBlock[];
+  created_at: string;
+}
+
+export interface EffectiveStyle {
+  source: "project" | "workspace" | "platform" | "none" | "preview";
+  pack_id: string | null;
+  pack_name: string | null;
+  version_id: string | null;
+  version_number: number | null;
+}
+
+export interface ComposedPrompt {
+  model: string;
+  adapter_version: string;
+  modality: string;
+  prompt: string;
+  negative_prompt: string | null;
+  applied_blocks: { id: string; name: string; category: string }[];
+  unsupported: string[];
+}
+
+export interface PublishingJob {
+  id: string;
+  project_id: string | null;
+  social_account_id: string;
+  artifact_version_id: string;
+  media_type: "photo" | "video";
+  caption: string;
+  scheduled_at: string;
+  timezone: string;
+  status: "scheduled" | "publishing" | "published" | "failed" | "cancelled";
+  external_post_id: string | null;
+  published_at: string | null;
+  attempts: number;
+  last_error: string | null;
+  created_at: string;
+  page_name: string;
+  artifact_name: string;
+}

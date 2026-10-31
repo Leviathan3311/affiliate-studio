@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, CalendarDays, Inbox, LayoutGrid, LogOut, Menu, Settings, Users, X } from "lucide-react";
+import { Bell, CalendarClock, CalendarDays, FolderKanban, Inbox, LayoutGrid, LogOut, Menu, Settings, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -25,6 +25,8 @@ export function Mark({ size = 22 }: { size?: number }) {
 
 const NAV = [
   { href: "/app", label: "Tổng quan", icon: LayoutGrid, roles: [] as string[] },
+  { href: "/app/projects", label: "Dự án quảng cáo", icon: FolderKanban, roles: ["admin", "marketing"] },
+  { href: "/app/publishing", label: "Lịch đăng", icon: CalendarClock, roles: ["admin", "marketing"] },
   { href: "/app/inbox", label: "Hộp thư", icon: Inbox, roles: ["admin", "sales", "branch_manager"] },
   { href: "/app/customers", label: "Khách hàng", icon: Users, roles: ["admin", "sales", "branch_manager"] },
   { href: "/app/bookings", label: "Lịch hẹn", icon: CalendarDays, roles: ["admin", "sales", "branch_manager"] },
@@ -44,7 +46,7 @@ function NavLink({
   onNavigate?: () => void;
 }) {
   const path = usePathname();
-  const active = href === "/app" ? path === "/app" : path.startsWith(href);
+  const active = href === "/app" ? path === "/app" : path.startsWith(href) || (href === "/app/projects" && path.startsWith("/app/project"));
   return (
     <Link
       href={href}
