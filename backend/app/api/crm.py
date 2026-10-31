@@ -10,6 +10,7 @@ from sqlalchemy import func, or_, select
 
 from app.db import utcnow
 from app.deps import Sales
+from app.engagement import is_opted_out
 from app.models import (
     LEAD_STATUSES,
     Booking,
@@ -81,6 +82,7 @@ class BookingBrief(ORM):
 
 
 class Customer360(CustomerOut):
+    suppressed: bool
     channels: list[str]
     leads: list[LeadOut]
     bookings: list[BookingBrief]
@@ -139,6 +141,7 @@ def get_customer(customer_id: uuid.UUID, ctx: Sales):
     return Customer360.model_validate(
         {
             **CustomerOut.model_validate(c).model_dump(),
+            "suppressed": is_opted_out(db, c.id, utcnow()),
             "channels": ["messenger"] * bool(n_ids),
             "leads": leads,
             "bookings": bookings,

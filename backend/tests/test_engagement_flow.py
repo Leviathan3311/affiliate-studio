@@ -173,3 +173,14 @@ def test_other_workspace_cannot_read_conversation(client, db, spa, llm):
 def test_mask_pii():
     assert mask_pii("sđt 0912 345 678, mail a.b@x.vn") == "sđt [SĐT], mail [EMAIL]"
     assert mask_pii("+84912345678") == "[SĐT]"
+
+
+def test_today_counts_night_queue(client, db, spa, llm):
+    now = datetime.now(UTC)
+    deliver(client, db, "mid.1", "Hello", now)
+    conv = db.scalar(select(Conversation))
+    conv.needs_ai_at = now + timedelta(hours=3)  # as if held by quiet hours
+    db.commit()
+    body = client.get("/api/v1/analytics/today", headers=spa).json()
+    assert sum(body["inbound_by_hour"]) == 1 and len(body["inbound_by_hour"]) == 24
+    assert body["queued_for_morning"] == 1

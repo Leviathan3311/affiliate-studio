@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 from pydantic import AwareDatetime, BaseModel, ConfigDict
@@ -151,4 +152,45 @@ def overview(ctx: AnyMember, start: AwareDatetime | None = None, end: AwareDatet
                 Notification.read_at.is_(None),
             )
         ),
+    )
+
+
+class Today(BaseModel):
+    date: str
+    timezone: str
+    active_start: str
+    active_end: str
+    inbound_by_hour: list[int]  # 24 local-hour buckets of customer messages today
+    queued_for_morning: int  # threads held by quiet hours for the next batch run
+    next_batch_at: datetime | None
+
+
+@router.get("/analytics/today", response_model=Today)
+def today(ctx: AnyMember):
+    ws, now = ctx.workspace, utcnow()
+    tz = ZoneInfo(ws.timezone)
+    local_midnight = now.astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    times = ctx.db.scalars(
+        select(Message.created_at).where(
+            Message.workspace_id == ws.id,
+            Message.direction == "in",
+            Message.created_at >= local_midnight,
+        )
+    ).all()
+    buckets = [0] * 24
+    for t in times:
+        buckets[t.astimezone(tz).hour] += 1
+    queued = ctx.db.scalars(
+        select(Conversation.needs_ai_at).where(
+            Conversation.workspace_id == ws.id, Conversation.needs_ai_at > now
+        )
+    ).all()
+    return Today(
+        date=local_midnight.date().isoformat(),
+        timezone=ws.timezone,
+        active_start=ws.active_start,
+        active_end=ws.active_end,
+        inbound_by_hour=buckets,
+        queued_for_morning=len(queued),
+        next_batch_at=min(queued) if queued else None,
     )

@@ -46,7 +46,7 @@ class AgentOutput(BaseModel):
 
 
 _PRICE = re.compile(
-    r"(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)\s*(k|nghìn|ngàn|tr|triệu|đ|vnđ|vnd)?",
+    r"(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)\s*(k|nghìn|ngàn|tr|triệu|đ|vnđ|vnd)?(?!\w)",
     re.IGNORECASE,
 )
 

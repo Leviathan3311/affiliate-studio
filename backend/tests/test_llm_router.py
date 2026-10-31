@@ -47,3 +47,5 @@ def test_extract_prices():
         1200000,
         199000,
     }
+    # units must be whole words: "12 Trần Quốc Thảo" is an address, not 12 triệu
+    assert extract_prices("Spa ở 12 Trần Quốc Thảo, 3 tầng") == set()
