@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { api, ApiError, session } from "@/lib/api";
+import { LegalLinks } from "./legal";
 import { Mark } from "./shell";
 import { Button, ErrorNote, Field } from "./ui";
 
@@ -20,6 +21,7 @@ export function AuthCard({ title, sub, children }: { title: string; sub: string;
           <p className="mb-5 mt-1 text-sm text-muted">{sub}</p>
           {children}
         </div>
+        <LegalLinks className="mt-6" />
       </div>
     </main>
   );
