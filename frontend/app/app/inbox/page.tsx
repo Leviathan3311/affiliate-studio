@@ -108,7 +108,7 @@ function Inbox() {
         <Thread key={selected} id={selected} onBack={() => select(null)} onChanged={list.reload} />
       ) : (
         <div className="hidden flex-1 place-items-center md:grid">
-          <Empty title="Chọn một hội thoại">Gợi ý của AI và chính sách gửi tin hiển thị bên phải hội thoại.</Empty>
+          <Empty title="Chọn một hội thoại">Gợi ý trả lời của AI hiện ở bên phải hội thoại.</Empty>
         </div>
       )}
     </div>
@@ -176,7 +176,7 @@ function Thread({ id, onBack, onChanged }: { id: string; onBack: () => void; onC
           <div className="min-w-0 flex-1">
             <h2 className="truncate font-semibold">{c.customer_name}</h2>
             <p className="text-xs text-muted">
-              Messenger · {windowOpen ? "trong cửa sổ 24 giờ" : "đã quá 24 giờ, không thể nhắn chủ động"}
+              Messenger · {windowOpen ? "khách nhắn trong 24 giờ qua" : "đã quá 24 giờ, chỉ trả lời được khi khách nhắn lại"}
             </p>
           </div>
           <Button variant="ghost" onClick={() => setShowAi(true)} className="xl:hidden" aria-label="Xem gợi ý AI">
@@ -198,8 +198,8 @@ function Thread({ id, onBack, onChanged }: { id: string; onBack: () => void; onC
                 <p className={`mt-1 text-xs ${m.direction === "out" ? "text-ground/70" : "text-muted"}`}>
                   {time(m.created_at)}
                   {m.direction === "out" && ` · ${{ human: "Nhân viên", ai: "AI", system: "Tin mẫu ngoài giờ", customer: "" }[m.actor]}`}
-                  {m.provider_status === "dry_run" && " · chế độ thử (chưa gửi Meta)"}
-                  {m.provider_status === "failed" && ` · gửi lỗi: ${m.error}`}
+                  {m.provider_status === "dry_run" && " · chưa gửi tới khách"}
+                  {m.provider_status === "failed" && " · gửi không thành công"}
                 </p>
               </div>
             </li>
@@ -327,13 +327,13 @@ function AiPanel({
           </Link>
         </div>
         <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 text-sm">
-          <span>Tạm dừng tự động hoá cho khách này</span>
+          <span>Tạm dừng AI cho khách này</span>
           <input type="checkbox" checked={c.automation_paused} onChange={onTogglePause} className="size-4 accent-[var(--accent)]" />
         </label>
       </section>
 
       <section>
-        <h3 className="font-semibold">Quyết định gửi tin gần đây</h3>
+        <h3 className="font-semibold">Tin đã gửi gần đây</h3>
         {c.decisions.length === 0 && <p className="mt-2 text-sm text-muted">Chưa có tin gửi đi.</p>}
         <ul className="mt-2 space-y-2">
           {c.decisions.slice(0, 5).map((d) => (

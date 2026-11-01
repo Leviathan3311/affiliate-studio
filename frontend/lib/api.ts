@@ -31,6 +31,19 @@ export class ApiError extends Error {
 
 type FastApiDetail = string | { loc: (string | number)[]; msg: string }[];
 
+/** Server messages are shown as they are only when written for people (Vietnamese); anything else
+ * (an English status line, a provider error) becomes a plain sentence for its status code. */
+function plain(status: number, detail: string | undefined): string {
+  if (detail && /[À-ỹđĐ]/.test(detail)) return detail;
+  if (status === 401) return "Phiên đăng nhập đã hết, vui lòng đăng nhập lại.";
+  if (status === 403) return "Bạn không có quyền làm việc này.";
+  if (status === 404) return "Không tìm thấy, có thể đã bị xoá.";
+  if (status === 413) return "Tệp quá lớn.";
+  if (status === 429) return "Đang có quá nhiều yêu cầu, thử lại sau ít phút.";
+  if (status >= 500) return "Hệ thống đang bận, thử lại sau ít phút.";
+  return "Chưa thực hiện được, vui lòng thử lại.";
+}
+
 export async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const headers = new Headers(init.headers);
   const token = session.token();
@@ -65,7 +78,7 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
       );
       throw new ApiError(res.status, "Vui lòng kiểm tra các trường được đánh dấu.", fields);
     }
-    throw new ApiError(res.status, detail || `Lỗi ${res.status}`);
+    throw new ApiError(res.status, plain(res.status, detail));
   }
   return body as T;
 }

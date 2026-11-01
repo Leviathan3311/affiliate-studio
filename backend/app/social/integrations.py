@@ -46,9 +46,7 @@ def _upsert_page(db, workspace_id: uuid.UUID, page_id: str, name: str, token: st
         )
     )
     if acc and acc.workspace_id != workspace_id:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, f"Page {page_id} đã kết nối với workspace khác"
-        )
+        raise HTTPException(status.HTTP_409_CONFLICT, "Page này đã được kết nối với một spa khác")
     if acc is None:
         acc = SocialAccount(workspace_id=workspace_id, external_id=page_id, token_encrypted="")
         db.add(acc)
@@ -60,7 +58,10 @@ def _upsert_page(db, workspace_id: uuid.UUID, page_id: str, name: str, token: st
 @router.post("/integrations/meta/connect")
 def meta_connect(ctx: Admin):
     if not get_settings().meta_app_id:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "META_APP_ID chưa được cấu hình")
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Chưa bật kết nối Facebook, vui lòng liên hệ hỗ trợ",
+        )
     state = create_token(str(ctx.user.id), minutes=10, ws=str(ctx.ws_id), purpose="meta_oauth")
     return {"url": meta.oauth_url(state)}
 

@@ -56,7 +56,7 @@ export function ProjectChat({
     <div className="flex-none border-t border-rule bg-ground">
       {expanded && (
         <ol className="max-h-72 space-y-3 overflow-y-auto px-4 pt-3" aria-live="polite">
-          {msgs.length === 0 && <li className="text-sm text-muted">Hỏi AI về project, yêu cầu nghiên cứu, viết hoặc sửa kịch bản.</li>}
+          {msgs.length === 0 && <li className="text-sm text-muted">Hỏi AI về dự án, nhờ nghiên cứu, viết hoặc sửa kịch bản.</li>}
           {msgs.map((m) => (
             <li key={m.id} className={`flex ${m.role === "user" ? "justify-end" : ""}`}>
               <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.role === "user" ? "bg-ink text-ground" : "bg-raised"}`}>
@@ -85,10 +85,10 @@ export function ProjectChat({
           </button>
         </div>
         <div className="flex gap-2">
-          <label htmlFor="project-chat" className="sr-only">Nhắn cho trợ lý project</label>
+          <label htmlFor="project-chat" className="sr-only">Nhắn cho trợ lý dự án</label>
           <textarea id="project-chat" value={text} onChange={(e) => setText(e.target.value)} rows={2}
             onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); }}
-            placeholder={context ? "Ví dụ: rút hook ngắn hơn, nhấn mạnh ưu đãi lần đầu" : "Ví dụ: nghiên cứu đối thủ rồi viết 3 kịch bản"}
+            placeholder={context ? "Ví dụ: rút câu mở đầu ngắn hơn, nhấn mạnh ưu đãi lần đầu" : "Ví dụ: nghiên cứu đối thủ rồi viết 3 kịch bản"}
             className="min-w-0 flex-1 resize-none rounded-[var(--radius-input)] border border-control bg-surface px-3 py-2 text-sm focus:border-ink focus:outline-none" />
           <Button variant="primary" onClick={send} busy={busy} disabled={!text.trim()} className="self-end">Gửi</Button>
         </div>

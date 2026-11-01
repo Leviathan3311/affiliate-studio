@@ -179,7 +179,9 @@ def patch_conversation(conv_id: uuid.UUID, body: ConversationPatch, ctx: Sales):
             WorkspaceMember.workspace_id == ctx.ws_id, WorkspaceMember.user_id == uid
         )
     ):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Người được gán không thuộc workspace")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Người được giao không phải thành viên của spa"
+        )
     for k, v in changes.items():
         setattr(conv, k, v)
     ctx.audit("conversation.updated", "conversation", conv.id, fields=sorted(changes))

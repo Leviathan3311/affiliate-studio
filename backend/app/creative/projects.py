@@ -457,7 +457,9 @@ def _start_scripts(
         ctx.db.add(a)
         arts.append(a)
     if not arts:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Đã dùng hết tên Kịch bản A–Z trong project")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Dự án đã có đủ 26 kịch bản; lưu trữ bớt rồi viết thêm"
+        )
     ctx.db.flush()
     bg.add_task(_in_background, task_scripts, p.id, [a.id for a in arts], instruction)
     return arts
@@ -548,7 +550,7 @@ def delete_project(project_id: uuid.UUID, ctx: Marketing):
 def restore_project(project_id: uuid.UUID, ctx: Marketing):
     p = _project(ctx, project_id, allow_deleted=True)
     if p.status != "deleted" or p.deleted_at < utcnow() - timedelta(days=TRASH_DAYS):
-        raise HTTPException(status.HTTP_409_CONFLICT, "Project không còn trong thùng rác")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Dự án không còn trong thùng rác")
     p.status, p.deleted_at = "active", None
     ctx.audit("project.restored", "project", p.id)
     ctx.db.commit()
@@ -827,7 +829,7 @@ def _gemini_ready() -> None:
     if not get_settings().gemini_api_key:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Chưa cấu hình GEMINI_API_KEY cho luồng nghiên cứu/kịch bản",
+            "AI nghiên cứu và viết kịch bản chưa được bật, vui lòng liên hệ hỗ trợ",
         )
 
 
@@ -913,10 +915,10 @@ def chat(project_id: uuid.UUID, body: ChatIn, ctx: Marketing, bg: BackgroundTask
     db.add(user_msg)
     try:
         out = agents.orchestrate(db, p, history, body.message, selected)
-    except LLMUnavailable as e:
+    except LLMUnavailable:
         db.commit()
         raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, f"AI tạm thời không phản hồi: {e}"
+            status.HTTP_503_SERVICE_UNAVAILABLE, "AI đang bận, thử lại sau ít phút"
         ) from None
 
     action: dict = {"type": out.action}
@@ -990,9 +992,7 @@ def make_shorts(project_id: uuid.UUID, body: ShortsIn, ctx: Marketing):
         or not obj.mime_type.startswith("video/")
         or obj.status != "ready"
     ):
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, "Nguồn phải là video đã sẵn sàng trong project"
-        )
+        raise HTTPException(status.HTTP_409_CONFLICT, "Hãy chọn một video đã tạo xong trong dự án")
     job = media.create_shorts_job(ctx.db, p, obj, ctx.user.id, body.target_count, cta=body.cta)
     ctx.audit("media.shorts", "media_job", job.id, source=str(obj.id))
     ctx.db.commit()
@@ -1011,7 +1011,7 @@ def list_jobs(project_id: uuid.UUID, ctx: AnyMember):
 def cancel_job(job_id: uuid.UUID, ctx: Marketing):
     job = ctx.get(MediaJob, job_id)
     if job.status not in ("queued", "running"):
-        raise HTTPException(status.HTTP_409_CONFLICT, "Job đã kết thúc")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Việc này đã xong hoặc đã dừng")
     media.fail(ctx.db, job, "Người dùng đã huỷ", retryable=False)
     job.status = "cancelled"
     ctx.db.commit()

@@ -36,7 +36,7 @@ export default function PublishingPage() {
       </div>
       {list.error && <ErrorNote error={list.error} onRetry={list.reload} />}
       {list.loading && <Skeleton rows={5} />}
-      {list.data?.length === 0 && <Empty title="Chưa có bài nào">Duyệt creative trong một project rồi chọn “Xuất bản / Đặt lịch”.</Empty>}
+      {list.data?.length === 0 && <Empty title="Chưa có bài nào">Duyệt ảnh hoặc video trong một dự án rồi mở bước “Đăng bài”.</Empty>}
       {[...byDay.entries()].map(([day, jobs]) => (
         <section key={day} className="mb-8">
           <h2 className="mb-2 text-sm font-semibold capitalize">{day}</h2>
@@ -46,7 +46,7 @@ export default function PublishingPage() {
                 <span className="w-14 font-medium">{time(j.scheduled_at)}</span>
                 <div className="min-w-48 flex-1">
                   {j.project_id ? <Link href={`/app/project?id=${j.project_id}`} className="font-medium hover:underline">{j.artifact_name}</Link> : j.artifact_name}
-                  <p className="text-sm text-muted">{j.page_name} · {j.media_type === "video" ? "Video" : "Ảnh"}{j.external_post_id === "dry_run" ? " · chế độ thử" : ""}</p>
+                  <p className="text-sm text-muted">{j.page_name} · {j.media_type === "video" ? "Video" : "Ảnh"}</p>
                 </div>
                 <Pill tone={j.status === "published" ? "positive" : j.status === "failed" ? "negative" : "neutral"}>{PUBLISH_STATUS[j.status]}</Pill>
                 {(j.status === "scheduled" || j.status === "failed") && (

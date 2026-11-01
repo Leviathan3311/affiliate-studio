@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { Button, Empty, ErrorNote, Field, Initials, PageTitle, Panel, Pill, Select, Skeleton } from "@/components/ui";
 import { api, ApiError, useApi } from "@/lib/api";
-import { ago, BOOKING, dateTime, LEAD, vnd } from "@/lib/format";
+import { ago, BOOKING, dateTime, LEAD, LEAD_SOURCE, vnd } from "@/lib/format";
 import type { Customer, Customer360, LeadStatus } from "@/lib/types";
 
 export default function CustomersPage() {
@@ -176,7 +176,7 @@ function Profile({ id, onBack, onChanged }: { id: string; onBack: () => void; on
       </button>
       <PageTitle
         title={c.display_name}
-        sub={`Tương tác gần nhất: ${ago(c.last_interaction_at)} · Kênh: ${c.channels.join(", ") || "nhập tay"}`}
+        sub={`Tương tác gần nhất: ${ago(c.last_interaction_at)} · Kênh: ${c.channels.length ? "Messenger" : "nhập tay"}`}
         actions={
           <>
             {c.conversation_ids[0] && (
@@ -217,7 +217,7 @@ function Profile({ id, onBack, onChanged }: { id: string; onBack: () => void; on
             {c.leads.length === 0 && <p className="text-sm text-muted">—</p>}
             {c.leads.map((l) => (
               <div key={l.id} className="space-y-2">
-                <Select label={`Nguồn: ${l.source} · điểm ${l.score}/100`} value={l.status} onChange={(e) => setLead(l.id, e.target.value as LeadStatus)}>
+                <Select label={`Nguồn: ${LEAD_SOURCE[l.source] ?? "Khác"} · điểm ${l.score}/100`} value={l.status} onChange={(e) => setLead(l.id, e.target.value as LeadStatus)}>
                   {Object.entries(LEAD).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
                   ))}

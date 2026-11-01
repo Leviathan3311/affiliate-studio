@@ -112,7 +112,7 @@ def list_members(ctx: AnyMember):
 def add_member(body: MemberAdd, ctx: Admin):
     # shortcut: adds an already-registered user; email invitations need an email provider.
     if body.role == "owner" and ctx.role != "owner":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Chỉ Owner mới gán quyền Owner")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Chỉ chủ spa mới giao được quyền chủ spa")
     user = ctx.db.scalar(select(User).where(User.email == body.email.lower()))
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Người dùng chưa đăng ký tài khoản")
@@ -138,7 +138,7 @@ def _member(ctx, user_id: uuid.UUID) -> WorkspaceMember:
     if m is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy thành viên")
     if m.role == "owner" and ctx.role != "owner":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Không thể sửa Owner")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Không thể đổi quyền của chủ spa")
     return m
 
 
@@ -151,14 +151,14 @@ def _ensure_owner_remains(ctx, m: WorkspaceMember) -> None:
         )
     )
     if owners <= 1:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Workspace cần ít nhất một Owner")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Spa cần ít nhất một chủ spa")
 
 
 @router.patch("/workspace/members/{user_id}", response_model=MemberOut)
 def update_member(user_id: uuid.UUID, body: MemberPatch, ctx: Admin):
     m = _member(ctx, user_id)
     if body.role == "owner" and ctx.role != "owner":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Chỉ Owner mới gán quyền Owner")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Chỉ chủ spa mới giao được quyền chủ spa")
     if body.role != "owner":
         _ensure_owner_remains(ctx, m)
     ctx.audit("member.role_changed", "user", user_id, before=m.role, after=body.role)

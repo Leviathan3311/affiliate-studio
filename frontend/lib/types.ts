@@ -426,16 +426,6 @@ export interface EffectiveStyle {
   version_number: number | null;
 }
 
-export interface ComposedPrompt {
-  model: string;
-  adapter_version: string;
-  modality: string;
-  prompt: string;
-  negative_prompt: string | null;
-  applied_blocks: { id: string; name: string; category: string }[];
-  unsupported: string[];
-}
-
 export interface PublishingJob {
   id: string;
   project_id: string | null;

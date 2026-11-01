@@ -48,13 +48,13 @@ export function PublishSection({ project, artifacts }: { project: Project; artif
   return (
     <div className="space-y-6">
       <Panel title="Đăng bài lên Facebook Page">
-        {!approved.length && <Empty title="Chưa có creative đã duyệt">Duyệt (Approve) một ảnh, video hoặc Short trước khi đăng.</Empty>}
+        {!approved.length && <Empty title="Chưa có ảnh hoặc video đã duyệt">Bấm “Duyệt” ở một ảnh, video hoặc Short trước khi đăng.</Empty>}
         {approved.length > 0 && !connected.length && (
           <p className="text-sm">Chưa kết nối Page nào. Vào <a href="/app/settings?tab=integrations" className="font-medium underline">Cài đặt → Facebook Page</a>.</p>
         )}
         {approved.length > 0 && connected.length > 0 && (
           <form onSubmit={(e) => { e.preventDefault(); submit(e.currentTarget); }} className="grid gap-4 sm:grid-cols-2" noValidate>
-            <Select label="Creative" name="artifact_id">
+            <Select label="Ảnh hoặc video" name="artifact_id">
               {approved.map((a) => <option key={a.id} value={a.id}>{a.display_name}</option>)}
             </Select>
             <Select label="Page" name="social_account_id">
@@ -66,14 +66,14 @@ export function PublishSection({ project, artifacts }: { project: Project; artif
               <label className="flex items-center gap-2 text-sm"><input type="radio" checked={mode === "now"} onChange={() => setMode("now")} className="accent-[var(--accent)]" /> Đăng ngay</label>
               <label className="flex items-center gap-2 text-sm"><input type="radio" checked={mode === "later"} onChange={() => setMode("later")} className="accent-[var(--accent)]" /> Đặt lịch</label>
               {mode === "later" && <input type="datetime-local" name="when" required aria-label="Thời điểm đăng" className="h-9 rounded-[var(--radius-control)] border border-control px-2 text-sm" />}
-              <span className="text-xs text-muted">Giờ theo {workspace.timezone}</span>
+              <span className="text-xs text-muted">{workspace.timezone === "Asia/Ho_Chi_Minh" ? "Giờ Việt Nam" : `Giờ theo ${workspace.timezone}`}</span>
             </fieldset>
             {error && <div className="sm:col-span-2"><ErrorNote error={error} /></div>}
             <div className="sm:col-span-2"><Button variant="primary" type="submit" busy={busy}>{mode === "now" ? "Đăng ngay" : "Lên lịch đăng"}</Button></div>
           </form>
         )}
       </Panel>
-      <Panel title="Lịch đăng của project">
+      <Panel title="Lịch đăng của dự án">
         {jobs.data?.length === 0 && <p className="text-sm text-muted">Chưa có bài nào.</p>}
         <ul className="divide-y divide-rule">
           {jobs.data?.map((j) => (
@@ -81,8 +81,7 @@ export function PublishSection({ project, artifacts }: { project: Project; artif
               <span className="w-28 font-medium">{dateTime(j.scheduled_at)}</span>
               <span className="min-w-40 flex-1 truncate">{j.artifact_name} → {j.page_name}</span>
               <Pill tone={j.status === "published" ? "positive" : j.status === "failed" ? "negative" : "neutral"}>{PUBLISH_STATUS[j.status]}</Pill>
-              {j.external_post_id === "dry_run" && <span className="text-xs text-muted">chế độ thử</span>}
-              {j.last_error && <span className="w-full text-xs text-negative">{j.last_error}</span>}
+              {j.last_error && <span className="w-full text-xs text-negative">Chưa đăng được. Kiểm tra Page trong Cài đặt rồi thử lại.</span>}
               {j.status === "scheduled" && (
                 <Button variant="ghost" className="h-8 text-xs" onClick={async () => { await api(`/publishing-jobs/${j.id}/cancel`, { method: "POST" }); jobs.reload(); }}>Huỷ</Button>
               )}

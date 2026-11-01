@@ -51,7 +51,7 @@ export function ScriptView({
         </p>
       ))}
       <dl className="grid gap-4 sm:grid-cols-2">
-        {([["Góc tiếp cận", s.angle], ["Insight", s.insight], ["Hook (3 giây đầu)", s.hook], ["Thông điệp chính", s.key_message], ["CTA", s.cta], ["Thời lượng", `${s.duration_seconds} giây · 9:16`]] as const).map(([k, v]) => (
+        {([["Góc tiếp cận", s.angle], ["Insight", s.insight], ["Câu mở đầu (3 giây đầu)", s.hook], ["Thông điệp chính", s.key_message], ["CTA", s.cta], ["Thời lượng", `${s.duration_seconds} giây · 9:16`]] as const).map(([k, v]) => (
           <div key={k}>
             <dt className="text-xs text-faint">{k}</dt>
             <dd className="mt-1 text-[15px] leading-relaxed">{v || "—"}</dd>
@@ -85,7 +85,7 @@ export function ScriptView({
       </div>
       {s.caption && (
         <div className="mt-5">
-          <p className="text-xs text-faint">Caption đề xuất</p>
+          <p className="text-xs text-faint">Nội dung bài đăng gợi ý</p>
           <p className="mt-0.5 whitespace-pre-wrap">{s.caption} {s.hashtags?.join(" ")}</p>
         </div>
       )}
@@ -117,8 +117,8 @@ export function CompareView({ items, onClose }: { items: Artifact[]; onClose: ()
     ["Hook", (s) => s.hook],
     ["Thông điệp", (s) => s.key_message],
     ["CTA", (s) => s.cta],
-    ["Thời lượng", (s) => `${s.duration_seconds} giây · ${s.shots.length} shot`],
-    ["Cờ kiểm tra", (s) => (s.flags?.length ? s.flags.map((f) => FLAG[f] ?? f).join("; ") : "—")],
+    ["Thời lượng", (s) => `${s.duration_seconds} giây · ${s.shots.length} cảnh`],
+    ["Cần lưu ý", (s) => (s.flags?.length ? s.flags.map((f) => FLAG[f] ?? f).join("; ") : "—")],
   ];
   return (
     <Panel title={`So sánh ${items.length} phương án`} action={<Button variant="ghost" onClick={onClose}>Đóng</Button>}>

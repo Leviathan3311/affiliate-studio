@@ -163,9 +163,7 @@ def patch_booking(booking_id: uuid.UUID, body: BookingPatch, ctx: Sales):
     b = ctx.get(Booking, booking_id)
     if body.status and body.status != b.status:
         if body.status not in TRANSITIONS.get(b.status, set()):
-            raise HTTPException(
-                status.HTTP_409_CONFLICT, f"Không thể chuyển {b.status} → {body.status}"
-            )
+            raise HTTPException(status.HTTP_409_CONFLICT, "Không đổi được sang trạng thái này")
         ctx.db.add(
             BookingStatusHistory(
                 booking_id=b.id, from_status=b.status, to_status=body.status, changed_by=ctx.user.id
@@ -178,7 +176,7 @@ def patch_booking(booking_id: uuid.UUID, body: BookingPatch, ctx: Sales):
     if body.actual_revenue is not None:
         if b.status != "completed":
             raise HTTPException(
-                status.HTTP_409_CONFLICT, "Chỉ ghi doanh thu khi booking đã hoàn tất"
+                status.HTTP_409_CONFLICT, "Chỉ ghi doanh thu khi lịch hẹn đã hoàn tất"
             )
         b.actual_revenue = body.actual_revenue
         ctx.audit("booking.revenue_recorded", "booking", b.id, amount=body.actual_revenue)

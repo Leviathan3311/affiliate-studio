@@ -230,7 +230,7 @@ function ScriptsSection({ project, scripts, open, compare, setCompare, onOpen, o
     <div className="space-y-[14px]">
       {comparing.length >= 2 && <CompareView items={comparing} onClose={() => setCompare([])} />}
       {scripts.length > 0 && (
-        <Panel title="Các phương án" action={scripts.length > 1 ? <span className="text-xs text-faint">Tick 2–3 bản để so sánh</span> : undefined}>
+        <Panel title="Các phương án" action={scripts.length > 1 ? <span className="text-xs text-faint">Chọn 2–3 bản để so sánh</span> : undefined}>
           <ul>
             {scripts.map((s) => {
               const c = s.current?.content as { hook?: string; duration_seconds?: number } | undefined;

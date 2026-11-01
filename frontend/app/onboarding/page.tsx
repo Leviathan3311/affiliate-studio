@@ -28,7 +28,7 @@ export default function Onboarding() {
   }
 
   return (
-    <AuthCard title="Tạo workspace cho spa" sub="Mỗi spa có dữ liệu riêng; bạn có thể mời nhân viên sau.">
+    <AuthCard title="Thông tin spa của bạn" sub="Mỗi spa có dữ liệu riêng; bạn có thể mời nhân viên sau.">
       <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
         {error && !error.fields.name && <ErrorNote error={error} />}
         <Field label="Tên spa" name="name" required placeholder="Ví dụ: Lotus Spa Quận 3" error={error?.fields.name} />

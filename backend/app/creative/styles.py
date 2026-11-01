@@ -155,7 +155,7 @@ def update_pack(pack_id: uuid.UUID, body: PackIn, ctx: Admin):
     pack = _visible_pack(ctx, pack_id)
     if pack.workspace_id is None:
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Preset hệ thống không sửa được; hãy nhân bản"
+            status.HTTP_403_FORBIDDEN, "Mẫu có sẵn không sửa được; hãy nhân bản để sửa"
         )
     last = latest_version(ctx.db, pack.id)
     pack.name, pack.description = body.name, body.description
@@ -177,7 +177,7 @@ def update_pack(pack_id: uuid.UUID, body: PackIn, ctx: Admin):
 def archive_pack(pack_id: uuid.UUID, ctx: Admin):
     pack = _visible_pack(ctx, pack_id)
     if pack.workspace_id is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Không lưu trữ được preset hệ thống")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Không lưu trữ được mẫu có sẵn")
     pack.status = "archived"
     for a in ctx.db.scalars(
         select(StyleAssignment).where(StyleAssignment.style_pack_id == pack.id)
@@ -253,7 +253,9 @@ def put_project_style(project_id: uuid.UUID, body: ProjectStyleIn, ctx: Marketin
         pack_id = body.style_pack_id if body.mode == "pack" else None
         if body.mode == "pack":
             if pack_id is None:
-                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Chọn style pack")
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY, "Hãy chọn một bộ phong cách"
+                )
             _visible_pack(ctx, pack_id)
         if a is None:
             ctx.db.add(

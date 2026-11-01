@@ -71,7 +71,7 @@ export const FLAG: Record<string, string> = {
   unverified_price: "AI nhắc tới giá không có trong bảng giá",
   non_vietnamese_output: "Câu trả lời có ký tự ngoài tiếng Việt",
   llm_unavailable: "AI tạm thời không phản hồi (hết hạn mức hoặc lỗi mạng)",
-  invalid_ai_output: "AI trả về sai định dạng",
+  invalid_ai_output: "AI trả lời chưa trọn vẹn",
   agent_error: "Lỗi khi phân tích hội thoại",
 };
 
@@ -79,7 +79,7 @@ export const POLICY_REASON: Record<string, string> = {
   ok: "Được phép gửi",
   customer_opted_out: "Khách đã yêu cầu dừng nhận tin",
   automation_paused: "Tự động hoá đang tạm dừng cho khách này",
-  outside_24h_window: "Đã quá 24 giờ kể từ tin nhắn cuối của khách (chính sách Meta)",
+  outside_24h_window: "Đã quá 24 giờ kể từ tin nhắn cuối của khách (quy định của Facebook)",
   marketing_opt_in_required: "Cần khách đồng ý nhận tin marketing",
   quiet_hours: "Ngoài giờ hoạt động — sẽ xử lý vào đầu ca",
   unknown_purpose: "Mục đích gửi không hợp lệ",
@@ -113,12 +113,9 @@ export const INPUT_ROLE: Record<string, string> = {
   other: "Khác",
 };
 
-export const JOB_STAGE: Record<string, string> = {
-  queued: "Chờ GPU Kaggle",
-  running: "Đang xử lý",
-  succeeded: "Hoàn tất",
-  failed: "Lỗi",
-  cancelled: "Đã huỷ",
+export const LEAD_SOURCE: Record<string, string> = {
+  messenger: "Messenger",
+  manual: "Nhập tay",
 };
 
 export const PUBLISH_STATUS: Record<string, string> = {

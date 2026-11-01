@@ -111,7 +111,7 @@ def _crud(path: str, model, schema: type[BaseModel], order_by) -> None:
         try:
             ctx.db.commit()
         except IntegrityError:
-            raise HTTPException(409, "Đang được booking sử dụng; hãy tắt thay vì xoá") from None
+            raise HTTPException(409, "Đang có lịch hẹn dùng mục này; hãy tắt thay vì xoá") from None
 
 
 _crud("branches", Branch, BranchIn, Branch.created_at)

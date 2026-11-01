@@ -152,7 +152,7 @@ function ShortsLauncher({ project, videos, onChanged }: { project: Project; vide
         <label className="flex flex-col gap-1.5 text-sm font-medium">Số đoạn
           <input type="number" min={1} max={5} value={count} onChange={(e) => setCount(Number(e.target.value))} className="h-9 rounded-[var(--radius-control)] border border-control px-3 font-normal" />
         </label>
-        <label className="flex flex-col gap-1.5 text-sm font-medium">CTA
+        <label className="flex flex-col gap-1.5 text-sm font-medium">Lời kêu gọi cuối video
           <input value={cta} onChange={(e) => setCta(e.target.value)} placeholder="Nhắn Page để giữ chỗ" className="h-9 rounded-[var(--radius-control)] border border-control px-3 font-normal" />
         </label>
         <Button variant="primary" onClick={go} busy={busy} disabled={!source}>Cắt Shorts</Button>
@@ -201,7 +201,7 @@ export function MediaView({ a, onChanged }: { a: Artifact; onChanged: () => void
       {a.kind === "short" && (
         <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
           <div><dt className="text-xs text-muted">Đoạn gốc</dt><dd>{String(meta.start)}s → {String(meta.end)}s</dd></div>
-          <div><dt className="text-xs text-muted">Hook</dt><dd>{String(meta.hook ?? "—")}</dd></div>
+          <div><dt className="text-xs text-muted">Câu mở đầu</dt><dd>{String(meta.hook ?? "—")}</dd></div>
           <div><dt className="text-xs text-muted">Lý do chọn</dt><dd>{String(meta.reason ?? "—")}</dd></div>
         </dl>
       )}

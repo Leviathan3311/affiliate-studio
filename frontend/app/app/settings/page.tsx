@@ -5,16 +5,16 @@ import { Suspense, useState, type FormEvent, type ReactNode } from "react";
 import { StyleLibrary } from "@/components/style-library";
 import { Button, Empty, ErrorNote, Field, PageTitle, Panel, Pill, Select, Skeleton } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import { api, ApiError, API_URL, useApi } from "@/lib/api";
+import { api, ApiError, useApi } from "@/lib/api";
 import { ROLE, vnd } from "@/lib/format";
 import type { Branch, Brand, Knowledge, Member, Role, Service, SocialAccount } from "@/lib/types";
 
 const TABS = [
   { id: "brand", label: "Thương hiệu" },
   { id: "services", label: "Dịch vụ & giá" },
-  { id: "faq", label: "FAQ & chính sách" },
+  { id: "faq", label: "Câu hỏi thường gặp" },
   { id: "branches", label: "Chi nhánh" },
-  { id: "styles", label: "Style tạo ảnh/video" },
+  { id: "styles", label: "Phong cách hình ảnh" },
   { id: "integrations", label: "Facebook Page" },
   { id: "ai", label: "Giờ trực AI" },
   { id: "members", label: "Thành viên" },
@@ -201,7 +201,7 @@ function KnowledgeTab() {
   const item = editing === "new" ? null : editing;
   return (
     <ListTab
-      title="FAQ & chính sách"
+      title="Câu hỏi thường gặp"
       empty="Thêm các câu khách hay hỏi: đỗ xe, thanh toán, chính sách huỷ lịch…"
       list={list}
       onNew={() => setEditing("new")}
@@ -331,7 +331,6 @@ function ListTab<T extends { id: string }>({
 function IntegrationsTab({ connected, metaError }: { connected: string | null; metaError: string | null }) {
   const { can } = useWorkspace();
   const list = useApi<SocialAccount[]>("/integrations/social-accounts");
-  const s = useSubmit();
   const [oauthError, setOauthError] = useState<ApiError | null>(null);
   const admin = can("admin");
 
@@ -345,10 +344,10 @@ function IntegrationsTab({ connected, metaError }: { connected: string | null; m
   }
 
   return (
-    <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
+    <div className="max-w-2xl">
       <Panel title="Page đã kết nối">
         {connected && <p role="status" className="mb-3 text-sm text-positive">Đã kết nối {connected} Page.</p>}
-        {metaError && <p role="alert" className="mb-3 text-sm text-negative">Kết nối thất bại: {metaError}</p>}
+        {metaError && <p role="alert" className="mb-3 text-sm text-negative">{metaError === "cancelled" ? "Bạn đã huỷ kết nối Facebook." : "Chưa kết nối được Facebook, vui lòng thử lại."}</p>}
         {list.loading && <Skeleton rows={2} />}
         {list.data?.length === 0 && <Empty title="Chưa kết nối Facebook Page">Kết nối để nhận tin nhắn Messenger vào hộp thư.</Empty>}
         <ul className="divide-y divide-rule">
@@ -356,7 +355,6 @@ function IntegrationsTab({ connected, metaError }: { connected: string | null; m
             <li key={a.id} className="flex items-center gap-3 py-3">
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{a.name || "Facebook Page"}</p>
-                <p className="text-xs text-muted">ID {a.external_id}</p>
               </div>
               <Pill tone={a.status === "connected" ? "positive" : "neutral"}>{a.status === "connected" ? "Đang kết nối" : "Đã ngắt"}</Pill>
               {admin && a.status === "connected" && (
@@ -373,33 +371,9 @@ function IntegrationsTab({ connected, metaError }: { connected: string | null; m
           <div className="mt-4 space-y-2">
             <Button variant="primary" onClick={oauth}>Kết nối bằng Facebook</Button>
             {oauthError && <ErrorNote error={oauthError} />}
-            <p className="text-xs text-muted">Webhook: {API_URL}/api/v1/webhooks/meta</p>
           </div>
         )}
       </Panel>
-      {admin && (
-        <Panel title="Kết nối thủ công (giai đoạn thử nghiệm)">
-          <p className="mb-4 text-sm text-muted">Dùng Page Access Token từ Graph API Explorer khi ứng dụng Meta chưa qua App Review.</p>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const f = form(e);
-              const target = e.currentTarget;
-              if (await s.run(() => api("/integrations/social-accounts/manual", { method: "POST", json: f }))) {
-                target.reset();
-                list.reload();
-              }
-            }}
-            className="grid gap-4"
-            noValidate
-          >
-            <Field label="Page ID" name="page_id" inputMode="numeric" error={s.fe.page_id} />
-            <Field label="Tên Page" name="name" />
-            <Field label="Page Access Token" name="page_access_token" type="password" autoComplete="off" error={s.fe.page_access_token} hint="Được mã hoá khi lưu, không hiển thị lại" />
-            <SaveRow {...s} label="Kết nối Page" />
-          </form>
-        </Panel>
-      )}
     </div>
   );
 }
@@ -452,7 +426,7 @@ function AiTab() {
             name="quiet_hours_template"
             textarea
             defaultValue={workspace.quiet_hours_template}
-            hint="{brand} là tên spa, {active_start} là giờ bắt đầu trực. Gửi tối đa 1 lần mỗi đêm cho mỗi khách."
+            hint="Gõ {brand} để chèn tên spa, {active_start} để chèn giờ AI bắt đầu trực. Mỗi khách nhận tối đa 1 tin mỗi đêm."
             error={s.fe.quiet_hours_template}
           />
         </div>

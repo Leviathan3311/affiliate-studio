@@ -240,7 +240,7 @@ def run_research(db: Session, project: Project, mode: str) -> tuple[dict, str]:
         report["confidence"] = "low"
         report["unknowns"] = [
             *report["unknowns"],
-            "Chưa có nguồn kiểm chứng: thêm URL đối thủ/fanpage vào project",
+            "Chưa có nguồn kiểm chứng: thêm link fanpage hoặc website đối thủ vào dự án",
         ]
     return report, res.model
 

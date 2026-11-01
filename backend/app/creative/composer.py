@@ -8,7 +8,7 @@ import re
 import uuid
 from dataclasses import asdict, dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.models import StyleAssignment, StylePack, StylePackVersion
@@ -160,8 +160,19 @@ PRESETS = [
 
 
 def ensure_presets(db: Session) -> None:
-    if db.scalar(select(StylePack.id).where(StylePack.workspace_id.is_(None)).limit(1)):
+    def seeded() -> bool:
+        return bool(
+            db.scalar(select(StylePack.id).where(StylePack.workspace_id.is_(None)).limit(1))
+        )
+
+    if seeded():
         return
+    if db.get_bind().dialect.name == "postgresql":
+        # The settings page asks for packs and assignments at once: without the lock both
+        # requests saw no presets and each seeded a copy.
+        db.execute(text("SELECT pg_advisory_xact_lock(hashtext('style_presets'))"))
+        if seeded():
+            return
     for p in PRESETS:
         pack = StylePack(workspace_id=None, name=p["name"], description=p["description"])
         db.add(pack)

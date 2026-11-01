@@ -89,14 +89,14 @@ def list_jobs(
 def create_job(body: PublishIn, ctx: Marketing):
     art = ctx.get(Artifact, body.artifact_id)
     if art.status != "approved":
-        raise HTTPException(status.HTTP_409_CONFLICT, "Chỉ đăng creative đã được duyệt (Approved)")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Chỉ đăng được ảnh hoặc video đã duyệt")
     page = ctx.get(SocialAccount, body.social_account_id)
     if page.status != "connected":
         raise HTTPException(status.HTTP_409_CONFLICT, "Page chưa kết nối")
     v = ctx.db.get(ArtifactVersion, art.current_version_id)
     obj = ctx.db.get(StorageObject, v.storage_object_id) if v.storage_object_id else None
     if obj is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Creative chưa có tệp media")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ảnh hoặc video này chưa có tệp để đăng")
     when = body.scheduled_at or utcnow()
     job = PublishingJob(
         workspace_id=ctx.ws_id,
