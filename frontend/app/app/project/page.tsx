@@ -30,6 +30,7 @@ const SECTIONS: { id: Section; label: string }[] = [
 ];
 const SECTION_OF: Record<Artifact["kind"], Section> = { research: "research", script: "scripts", image: "media", video: "media", short: "shorts" };
 const MEDIA: Artifact["kind"][] = ["image", "video", "short"];
+const BACK: Record<Artifact["kind"], string> = { script: "Tất cả kịch bản", research: "Báo cáo mới nhất", image: "Tất cả ảnh & video", video: "Tất cả ảnh & video", short: "Tất cả Shorts" };
 
 export default function ProjectPage() {
   return (
@@ -137,6 +138,12 @@ function Workspace() {
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="min-h-0 flex-1 space-y-[14px] overflow-y-auto px-4 py-5 sm:px-7">
             <JobStrip jobs={jobList} onChanged={refresh} />
+            {open && (
+              <button onClick={() => setOpenId(null)}
+                className="-ml-1 flex h-8 cursor-pointer items-center gap-1.5 rounded-full pl-1 pr-3 text-sm text-muted transition-colors hover:bg-raised hover:text-ink">
+                <ArrowLeft className="size-4" aria-hidden /> {BACK[open.kind]}
+              </button>
+            )}
             {section === "overview" && (
               <Overview project={p} next={next} go={go} reading={reading || awaitingSummary} onReread={reread} onChanged={refresh} />
             )}
