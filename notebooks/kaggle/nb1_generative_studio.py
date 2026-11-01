@@ -95,15 +95,25 @@ def build_sdcpp() -> None:
     """Compile sd-cli with CUDA for the T4 only (sm_75, no CUTLASS) to keep the build short."""
     if SD_CLI.exists():
         return
-    log = open("/kaggle/working/sdcpp_build.log", "w")
-    run = lambda *cmd: subprocess.run(cmd, check=True, stdout=log, stderr=subprocess.STDOUT)
+    log_path = Path("/kaggle/working/sdcpp_build.log")
+    log = log_path.open("w")
+
+    def run(*cmd: str) -> None:
+        if subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT).returncode:
+            log.flush()
+            tail = "\n".join(log_path.read_text(errors="replace").splitlines()[-40:])
+            raise RuntimeError(f"sd.cpp build step failed: {' '.join(cmd[:3])}…\n--- last log lines ---\n{tail}")
+
     if not shutil.which("cmake"):
-        run(sys.executable, "-m", "pip", "install", "-q", "cmake")
-    run("git", "clone", "--depth", "1", "--branch", SDCPP_TAG, "--recursive", "--shallow-submodules",
-        "https://github.com/leejet/stable-diffusion.cpp", str(SDCPP))
+        run(sys.executable, "-m", "pip", "install", "-q", "cmake<4")
+    cudas = sorted(Path("/usr/local").glob("cuda*/bin/nvcc"))
+    nvcc = shutil.which("nvcc") or (str(cudas[-1]) if cudas else "/usr/local/cuda/bin/nvcc")
+    if not (SDCPP / ".git").exists():  # a re-run after a failed build reuses the checkout
+        run("git", "clone", "--depth", "1", "--branch", SDCPP_TAG, "--recursive", "--shallow-submodules",
+            "https://github.com/leejet/stable-diffusion.cpp", str(SDCPP))
     run("cmake", "-S", str(SDCPP), "-B", str(SDCPP / "build"), "-DCMAKE_BUILD_TYPE=Release", "-DSD_CUDA=ON",
         "-DCMAKE_CUDA_ARCHITECTURES=75", "-DGGML_CUDA_CUTLASS_PATH:PATH=",
-        f"-DCMAKE_CUDA_COMPILER={shutil.which('nvcc') or '/usr/local/cuda/bin/nvcc'}")
+        f"-DCMAKE_CUDA_COMPILER={nvcc}")
     run("cmake", "--build", str(SDCPP / "build"), "--config", "Release", "-j", str(os.cpu_count()), "--target", "sd-cli")
 
 
