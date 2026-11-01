@@ -161,6 +161,10 @@ export function MediaView({ a, onChanged }: { a: Artifact; onChanged: () => void
           )}
         </div>
       )}
+      {v?.model?.includes("minimax") && (
+        // MiniMax H3 community licence: the product UI must display "MiniMax H3".
+        <p className="mt-2 text-center text-xs text-muted">Video tạo bởi MiniMax H3 · nhạc nền ACE-Step 1.5</p>
+      )}
       {a.kind === "short" && (
         <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
           <div><dt className="text-xs text-muted">Đoạn gốc</dt><dd>{String(meta.start)}s → {String(meta.end)}s</dd></div>

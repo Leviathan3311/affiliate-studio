@@ -1,16 +1,25 @@
 # %% [markdown]
 # # GrowthPilot-Generative-Studio (Notebook 1)
 #
-# System design §2: **FLUX.2 [klein] 9B** (studio image + thumbnail) → **MiniMax H3** I2VA
+# System design §2: **FLUX.2 [klein]** (studio image + thumbnail) → **MiniMax H3** I2VA
 # (video + SFX/voice) → **ACE-Step 1.5** (BGM) → **FFmpeg** mix with BGM at 25%.
 #
 # Settings: Accelerator **GPU T4 x2**, Internet **On**, Secrets: `GP_API_URL`, `MEDIA_WORKER_TOKEN`,
-# `HF_TOKEN` (gated FLUX weights).
+# `HF_TOKEN`.
 #
 # VRAM plan (Phương án A): one ComfyUI server per GPU so nothing is reloaded between jobs.
-# `cuda:0` → FLUX.2 klein (~9.5 GB) + ACE-Step (~3.5 GB); `cuda:1` → MiniMax H3 Q4_K_M + Turbo LoRA
-# (~12.5 GB). The exact model graphs live in ComfyUI workflow files (API format) under
-# `workflows/`, so swapping a model or quantization never needs a code change.
+# `cuda:0` → FLUX.2 klein + ACE-Step 1.5; `cuda:1` → MiniMax H3 fl2va (I2VA) Q4_K + Turbo LoRA 8-step.
+# MiniMax H3 also needs its Qwen3-VL-32B text encoder (GGUF Q4_K_M 18.2 GB): it does not fit on a
+# 16 GB T4 next to the 11.4 GB transformer, so ComfyUI encodes the prompt first and offloads it to the
+# 29 GB system RAM. Total downloads are ~56 GB of the session's temporary disk.
+#
+# Licences (checked on Hugging Face, Nov 2026): FLUX.2 klein **4B = Apache-2.0** (commercial OK);
+# klein **9B = FLUX Non-Commercial** (needs a BFL commercial licence for a paid SaaS). MiniMax H3 =
+# community licence: commercial OK under USD 20M/yr revenue, and the product UI must display
+# "MiniMax H3". ACE-Step 1.5 = MIT / Apache-2.0.
+#
+# The model graphs live in ComfyUI workflow files (API format) under `workflows/`, so swapping a
+# model or quantization never needs a code change.
 
 # %%
 import json
@@ -33,16 +42,33 @@ HERE = Path(os.environ.get("GP_NOTEBOOK_DIR", "/kaggle/input/growthpilot-worker"
 COMFY = Path("/kaggle/working/ComfyUI")
 GPU_SERVERS = {"image": "http://127.0.0.1:8188", "audio": "http://127.0.0.1:8188", "video": "http://127.0.0.1:8189"}
 
-# Model files → ComfyUI model folders. CONFIRM the exact repos/files you use, then keep this list
-# in sync with the loaders inside workflows/*.json.
+# "4b" is safe for commercial use; switch to "9b" only with a BFL licence or for internal tests.
+FLUX_VARIANT = os.environ.get("GP_FLUX_VARIANT", "4b")
+FLUX = {
+    "4b": [
+        ("unsloth/FLUX.2-klein-4B-GGUF", "flux-2-klein-4b-Q8_0.gguf", "diffusion_models"),  # 4.3 GB
+        ("Comfy-Org/Flux-2-Klein-4B", "split_files/text_encoders/qwen_3_4b.safetensors", "text_encoders"),
+    ],
+    "9b": [
+        ("unsloth/FLUX.2-klein-9B-GGUF", "flux-2-klein-9b-Q8_0.gguf", "diffusion_models"),  # 10.3 GB
+        ("Comfy-Org/Flux-2-Klein-9B", "split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors", "text_encoders"),
+    ],
+}[FLUX_VARIANT]
+
+# (hf repo, file in repo, ComfyUI models subfolder). Keep in sync with the loaders in workflows/*.json.
 MODELS = [
-    # (hf repo, filename in repo, ComfyUI models subfolder)
-    ("black-forest-labs/FLUX.2-klein-9B", "flux2-klein-9b-fp8.safetensors", "diffusion_models"),
-    ("black-forest-labs/FLUX.2-klein-9B", "text_encoder.safetensors", "text_encoders"),
-    ("black-forest-labs/FLUX.2-klein-9B", "ae.safetensors", "vae"),
-    ("MiniMaxAI/MiniMax-H3-GGUF", "minimax-h3-Q4_K_M.gguf", "diffusion_models"),
-    ("MiniMaxAI/MiniMax-H3-GGUF", "h3-turbo-lora-8step.safetensors", "loras"),
-    ("ACE-Step/ACE-Step-v1-5", "ace_step_v1.5.safetensors", "checkpoints"),
+    *FLUX,
+    ("Comfy-Org/Flux-2-Klein-4B", "split_files/vae/flux2-vae.safetensors", "vae"),
+    # MiniMax H3 fl2va = first/last-frame image-to-video+audio (the design's I2VA mode)
+    ("unsloth/MiniMax-H3-GGUF", "minimax_h3_fl2va_pruned-Q4_K.gguf", "diffusion_models"),  # 11.4 GB
+    ("unsloth/MiniMax-H3-GGUF", "qwen3vl_32b_minimax_h3-Q4_K_M.gguf", "text_encoders"),  # 18.2 GB
+    ("unsloth/MiniMax-H3-GGUF", "vae/minimax_h3_video_vae_fp16.safetensors", "vae"),
+    ("unsloth/MiniMax-H3-GGUF", "vae/minimax_h3_audio_vae_fp32.safetensors", "vae"),
+    ("Comfy-Org/MiniMax-H3", "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", "loras"),
+    # ACE-Step 1.5 turbo, split files (~3.5 GB VRAM incl. the small text encoder)
+    ("Comfy-Org/ACE-Step-1.5", "split_files/diffusion_models/acestep_v1.5_turbo.safetensors", "diffusion_models"),
+    ("Comfy-Org/ACE-Step-1.5", "split_files/text_encoders/qwen_0.6b_ace15.safetensors", "text_encoders"),
+    ("Comfy-Org/ACE-Step-1.5", "split_files/vae/ace_1.5_vae.safetensors", "vae"),
 ]
 
 # %% [markdown]
@@ -59,7 +85,7 @@ def setup() -> None:
     from huggingface_hub import hf_hub_download
 
     for repo, filename, folder in MODELS:
-        target = COMFY / "models" / folder / filename
+        target = COMFY / "models" / folder / Path(filename).name
         if not target.exists():
             print("downloading", repo, filename, flush=True)
             path = hf_hub_download(repo, filename, token=secret("HF_TOKEN"), cache_dir="/kaggle/tmp/hf")
