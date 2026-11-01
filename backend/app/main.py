@@ -16,9 +16,12 @@ from app.social import bookings, crm, dashboard, inbox, integrations
 from app.workspace import auth, brand, workspaces
 
 app = FastAPI(title="GrowthPilot AI API", version="0.2.0")
+settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_settings().cors_origins,
+    allow_origins=settings.cors_origins,
+    # Local web on any port while developing; real domains must be listed in CORS_ORIGINS.
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?" if settings.env == "dev" else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
