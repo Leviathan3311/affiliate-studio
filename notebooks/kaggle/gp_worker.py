@@ -20,6 +20,9 @@ from pathlib import Path
 import requests
 
 
+SECRET_ERRORS: dict[str, str] = {}  # why a secret could not be read (never its value)
+
+
 def secret(name: str, default: str | None = None) -> str | None:
     if os.environ.get(name):
         return os.environ[name]
@@ -27,7 +30,8 @@ def secret(name: str, default: str | None = None) -> str | None:
         from kaggle_secrets import UserSecretsClient
 
         return UserSecretsClient().get_secret(name)
-    except Exception:
+    except Exception as e:
+        SECRET_ERRORS[name] = f"{type(e).__name__}: {str(e)[:160]}"
         return default
 
 
@@ -40,7 +44,12 @@ class Worker:
         api_url, token = secret("GP_API_URL"), secret("MEDIA_WORKER_TOKEN")
         if not api_url or not token:
             # Fail fast: without these the notebook would download ~60 GB and idle on GPU quota.
-            raise SystemExit("Missing Kaggle secrets GP_API_URL / MEDIA_WORKER_TOKEN (Add-ons -> Secrets).")
+            missing = [n for n, v in (("GP_API_URL", api_url), ("MEDIA_WORKER_TOKEN", token)) if not v]
+            why = "; ".join(f"{n} -> {SECRET_ERRORS.get(n, 'empty')}" for n in missing)
+            raise SystemExit(
+                f"Kaggle secrets not readable: {why}. In the editor open Add-ons -> Secrets and tick "
+                "'Attached' next to each secret for THIS notebook, then Run All again."
+            )
         self.api = api_url.rstrip("/") + "/api/v1/worker"
         self.headers = {"Authorization": f"Bearer {token}"}
         self.kinds = kinds
