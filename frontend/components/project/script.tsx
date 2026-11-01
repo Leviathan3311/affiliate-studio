@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, ErrorNote, Field, Panel, Pill, Skeleton } from "@/components/ui";
+import { Button, Dialog, ErrorNote, Field, Panel, Pill, Skeleton } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { ARTIFACT_STATUS, FLAG } from "@/lib/format";
-import type { Artifact, ComposedPrompt, EffectiveStyle, Project, Script } from "@/lib/types";
+import type { Artifact, EffectiveStyle, Project, Script } from "@/lib/types";
 import { statusTone } from "./library";
 
 export function ScriptView({
@@ -36,33 +36,33 @@ export function ScriptView({
   }
 
   if (a.status === "generating") {
-    return <Panel title={a.display_name}><Skeleton rows={6} /><p className="mt-3 text-sm text-muted">Gemini đang viết…</p></Panel>;
+    return <Panel title={a.display_name}><Skeleton rows={6} /><p className="mt-3 text-sm text-muted">AI đang viết kịch bản…</p></Panel>;
   }
-  if (!s) return <Panel title={a.display_name}><ErrorNote error={new Error(a.error ?? "Kịch bản chưa có nội dung")} /></Panel>;
+  if (!s) return <Panel title={a.display_name}><ErrorNote error={new Error("Kịch bản này chưa viết xong. Nhắn trợ lý AI để viết lại.")} /></Panel>;
 
   return (
     <Panel
       title={a.display_name}
-      action={<span className="flex items-center gap-2"><Pill tone={statusTone(a.status)}>{ARTIFACT_STATUS[a.status]}</Pill><span className="text-xs text-muted">v{a.version_count}</span></span>}
+      action={<span className="flex items-center gap-2"><Pill tone={statusTone(a.status)}>{ARTIFACT_STATUS[a.status]}</Pill><span className="text-xs text-faint">bản {a.version_count}</span></span>}
     >
       {s.flags?.map((f) => (
-        <p key={f} className="mb-3 rounded-md bg-[var(--pill-warning-bg)] px-3 py-2 text-sm text-[var(--pill-warning-ink)]">
+        <p key={f} className="mb-3 rounded-[var(--radius-input)] bg-[var(--pill-warning-bg)] px-3 py-2 text-sm text-[var(--pill-warning-ink)]">
           {FLAG[f] ?? f}: kiểm tra lại giá/ưu đãi trước khi dùng.
         </p>
       ))}
       <dl className="grid gap-4 sm:grid-cols-2">
         {([["Góc tiếp cận", s.angle], ["Insight", s.insight], ["Hook (3 giây đầu)", s.hook], ["Thông điệp chính", s.key_message], ["CTA", s.cta], ["Thời lượng", `${s.duration_seconds} giây · 9:16`]] as const).map(([k, v]) => (
           <div key={k}>
-            <dt className="text-xs text-muted">{k}</dt>
-            <dd className="mt-0.5">{v || "—"}</dd>
+            <dt className="text-xs text-faint">{k}</dt>
+            <dd className="mt-1 text-[15px] leading-relaxed">{v || "—"}</dd>
           </div>
         ))}
       </dl>
-      <h3 className="mt-6 text-sm font-semibold">Shot list · {s.shots.length}</h3>
+      <h3 className="mt-7 text-sm font-semibold">Các cảnh quay · {s.shots.length}</h3>
       <div className="mt-2 overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
-            <tr className="text-left text-xs text-muted">
+            <tr className="text-left text-xs text-faint">
               <th className="h-8 w-10 font-normal">#</th>
               <th className="font-normal">Cảnh</th>
               <th className="font-normal">Chữ trên màn hình</th>
@@ -74,7 +74,7 @@ export function ScriptView({
             {s.shots.map((shot, i) => (
               <tr key={i} className="border-t border-rule align-top">
                 <td className="py-2 text-muted">{i + 1}</td>
-                <td className="py-2 pr-3">{shot.description}<p className="text-xs text-muted">{shot.motion}</p></td>
+                <td className="py-2.5 pr-3">{shot.description}<p className="text-xs text-faint">{shot.motion}</p></td>
                 <td className="py-2 pr-3">{shot.on_screen_text || "—"}</td>
                 <td className="py-2 pr-3">{shot.sfx || "—"}</td>
                 <td className="py-2 text-right">{shot.duration_seconds}</td>
@@ -85,7 +85,7 @@ export function ScriptView({
       </div>
       {s.caption && (
         <div className="mt-5">
-          <p className="text-xs text-muted">Caption đề xuất</p>
+          <p className="text-xs text-faint">Caption đề xuất</p>
           <p className="mt-0.5 whitespace-pre-wrap">{s.caption} {s.hashtags?.join(" ")}</p>
         </div>
       )}
@@ -104,7 +104,7 @@ export function ScriptView({
         }}>Đổi tên</Button>
         <Button variant="ghost" busy={busy === "archive"} onClick={() => act("archive", `/artifacts/${a.id}`, { archived: true }, "PATCH")}>Lưu trữ</Button>
       </div>
-      <p className="mt-3 text-xs text-muted">Muốn sửa? Nhắn ở khung chat bên dưới; mỗi lần sửa thành một phiên bản mới, bản cũ vẫn giữ.</p>
+      <p className="mt-3 text-xs text-faint">Muốn sửa? Nhắn trợ lý AI ở khung bên dưới; bản cũ vẫn được giữ.</p>
       <span className="sr-only">{project.name}</span>
     </Panel>
   );
@@ -144,26 +144,19 @@ export function CompareView({ items, onClose }: { items: Artifact[]; onClose: ()
   );
 }
 
-/** Confirmation before any GPU job: active style chips, optional one-off instruction, prompt preview. */
+/** Confirmation before generating: what will be made, how long it takes, the style, one optional note. */
 export function GenerateDialog({ project, script, onClose, onQueued }: { project: Project; script: Artifact; onClose: () => void; onQueued: () => void }) {
   const [style, setStyle] = useState<Record<string, EffectiveStyle> | null>(null);
   const [extra, setExtra] = useState("");
   const [off, setOff] = useState(false);
-  const [preview, setPreview] = useState<ComposedPrompt | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const s = script.current?.content as unknown as Script;
+  const scenes = Math.min(3, s.shots.length);
 
   useEffect(() => {
     api<Record<string, EffectiveStyle>>(`/style-assignments?project_id=${project.id}`).then(setStyle, setError);
   }, [project.id]);
-
-  async function showPrompt() {
-    setPreview(await api<ComposedPrompt>("/style-preview", {
-      method: "POST",
-      json: { modality: "image", brief: s.shots[0]?.visual_prompt ?? s.hook, extra_instruction: extra, project_id: project.id },
-    }));
-  }
 
   async function go() {
     setBusy(true);
@@ -178,40 +171,30 @@ export function GenerateDialog({ project, script, onClose, onQueued }: { project
     }
   }
 
+  const styleName = style?.image?.pack_name;
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" role="dialog" aria-modal aria-labelledby="gen-title">
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[var(--radius-sheet)] bg-surface p-6 shadow-xl">
-        <h2 id="gen-title" className="text-lg font-semibold">Tạo ảnh & video từ {script.display_name}</h2>
-        <p className="mt-1 text-sm text-muted">
-          Notebook 1 trên Kaggle sẽ tạo: ảnh studio + thumbnail (FLUX.2), {Math.min(3, s.shots.length)} cảnh video có âm thanh (MiniMax H3), nhạc nền (ACE-Step) và trộn nhạc ở mức 25%.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {style ? Object.entries(style).map(([m, st]) => (
-            <Pill key={m} tone={off ? "neutral" : "accent"}>
-              {{ image: "Ảnh", video: "Video", audio: "Nhạc" }[m]}: {off || !st.pack_name ? "không style" : `${st.pack_name} v${st.version_number}`}
-            </Pill>
-          )) : <Skeleton rows={1} />}
-        </div>
-        <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm">
-          <input type="checkbox" checked={off} onChange={(e) => setOff(e.target.checked)} className="size-4 accent-[var(--accent)]" />
-          Tắt style cho lần này
-        </label>
-        <div className="mt-4">
-          <Field label="Yêu cầu riêng cho lần này (không đổi style mặc định)" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Ví dụ: tông màu watercolor nhẹ" />
-        </div>
-        <button onClick={showPrompt} className="mt-3 cursor-pointer text-sm font-medium underline">Xem prompt đã ghép</button>
-        {preview && (
-          <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-raised p-3 text-xs">
-            {preview.prompt}
-            {preview.unsupported.length > 0 && `\n\n[Ghi chú model: ${preview.unsupported.join(", ")}]`}
-          </pre>
+    <Dialog title={`Tạo ảnh & video cho “${script.display_name}”`} onClose={onClose}
+      footer={<><Button variant="ghost" onClick={onClose}>Huỷ</Button><Button variant="primary" onClick={go} busy={busy}>Bắt đầu tạo</Button></>}>
+      <p className="text-sm leading-relaxed text-muted">
+        AI sẽ tạo ảnh chính, ảnh bìa, {scenes} cảnh video có âm thanh và nhạc nền, rồi ghép thành một video {s.duration_seconds} giây.
+        Thường mất 20–40 phút; bạn có thể đóng trang, kết quả sẽ hiện ở mục Ảnh & Video.
+      </p>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-input)] bg-ground px-4 py-3">
+        <span className="text-sm">
+          <span className="text-faint">Phong cách </span>
+          {style ? (off || !styleName ? "Không dùng" : styleName) : "…"}
+        </span>
+        {styleName && (
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
+            <input type="checkbox" checked={off} onChange={(e) => setOff(e.target.checked)} className="size-4 accent-[var(--text)]" />
+            Bỏ phong cách lần này
+          </label>
         )}
-        {error && <div className="mt-3"><ErrorNote error={error} /></div>}
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>Huỷ</Button>
-          <Button variant="primary" onClick={go} busy={busy}>Gửi sang Kaggle</Button>
-        </div>
       </div>
-    </div>
+      <div className="mt-4">
+        <Field label="Ghi chú thêm (tuỳ chọn)" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Ví dụ: tông màu nhẹ, nhiều ánh sáng tự nhiên" />
+      </div>
+      {error && <div className="mt-3"><ErrorNote error={error} /></div>}
+    </Dialog>
   );
 }

@@ -9,6 +9,7 @@ import { useWorkspace } from "@/components/workspace";
 import { api, ApiError, useApi } from "@/lib/api";
 import { ago, bytes, OBJECTIVE } from "@/lib/format";
 import type { Project, Service } from "@/lib/types";
+import { UploadZone } from "@/components/project/upload";
 
 const COUNT_LABEL: [keyof Project["counts"], string][] = [
   ["script", "kịch bản"],
@@ -26,11 +27,11 @@ export default function ProjectsPage() {
     <>
       <PageTitle
         title="Dự án quảng cáo"
-        sub="Mỗi chiến dịch là một project: tài liệu, nghiên cứu, kịch bản, ảnh, video và lịch đăng ở cùng một chỗ."
+        sub="Mỗi chiến dịch là một dự án: tài liệu, nghiên cứu, kịch bản, ảnh, video và lịch đăng ở cùng một chỗ."
         actions={
           can("admin", "marketing") && (
             <Button variant="primary" onClick={() => setCreating(true)}>
-              <Plus className="size-4" aria-hidden /> Tạo project mới
+              <Plus className="size-4" aria-hidden /> Tạo dự án
             </Button>
           )
         }
@@ -39,23 +40,23 @@ export default function ProjectsPage() {
       {list.error && <ErrorNote error={list.error} onRetry={list.reload} />}
       {list.loading && <Skeleton rows={4} />}
       {list.data?.length === 0 && !creating && (
-        <Empty title="Chưa có project nào">
-          Tạo project cho đợt quảng bá đầu tiên: tải ảnh sản phẩm, để AI nghiên cứu và viết Kịch bản A/B/C.
+        <Empty title="Chưa có dự án nào">
+          Tạo dự án cho đợt quảng bá đầu tiên: tải tài liệu và ảnh sản phẩm, AI sẽ nghiên cứu và viết 3 phương án kịch bản.
         </Empty>
       )}
-      <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <ul className="grid gap-[14px] sm:grid-cols-2 xl:grid-cols-3">
         {list.data?.map((p) => (
           <li key={p.id}>
             <Link
               href={`/app/project?id=${p.id}`}
-              className="group flex h-full flex-col overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface transition-colors hover:border-control"
+              className="group flex h-full flex-col overflow-hidden rounded-[var(--radius-card)] bg-surface transition-colors hover:bg-raised"
             >
               <div className="aspect-[16/7] bg-raised">
                 {p.cover_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={p.cover_url} alt="" className="size-full object-cover" />
                 ) : (
-                  <div className="grid size-full place-items-center text-sm text-muted">Chưa có ảnh</div>
+                  <div className="grid size-full place-items-center text-sm text-faint">Chưa có ảnh</div>
                 )}
               </div>
               <div className="flex flex-1 flex-col gap-2 p-4">
@@ -64,10 +65,10 @@ export default function ProjectsPage() {
                   {p.status === "draft" && <Pill>Nháp</Pill>}
                   {p.status === "archived" && <Pill>Lưu trữ</Pill>}
                 </div>
-                <p className="text-sm text-muted">{OBJECTIVE[p.objective] ?? p.objective} · tạo {ago(p.created_at)}</p>
+                <p className="text-sm text-faint">{OBJECTIVE[p.objective] ?? p.objective} · tạo {ago(p.created_at)}</p>
                 <p className="mt-auto text-sm">
                   {COUNT_LABEL.map(([k, label]) => `${p.counts[k] ?? 0} ${label}`).join(" · ")}
-                  <span className="text-muted"> · {bytes(p.storage_bytes)}</span>
+                  <span className="text-faint"> · {bytes(p.storage_bytes)}</span>
                 </p>
               </div>
             </Link>
@@ -78,7 +79,7 @@ export default function ProjectsPage() {
   );
 }
 
-const STEPS = ["Mục tiêu", "Khách hàng & thời gian", "Brief & nguồn nghiên cứu"] as const;
+const STEPS = ["Thông tin", "Khách hàng & thời gian", "Tài liệu"] as const;
 
 function Wizard({ onClose }: { onClose: () => void }) {
   const router = useRouter();
@@ -98,6 +99,7 @@ function Wizard({ onClose }: { onClose: () => void }) {
   });
   const [error, setError] = useState<ApiError | null>(null);
   const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
+  const [files, setFiles] = useState<string[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const payload = (f = form) => ({
@@ -142,18 +144,21 @@ function Wizard({ onClose }: { onClose: () => void }) {
         return setError(e as ApiError);
       }
     }
-    if (step < STEPS.length - 1) setStep(step + 1);
-    else router.push(`/app/project?id=${project!.id}`);
+    if (step < STEPS.length - 1) return setStep(step + 1);
+    // The AI starts reading the documents now, so the project opens with its summary on the way.
+    if (files.length || form.brief.trim()) await api(`/projects/${project!.id}/context/build`, { method: "POST" }).catch(() => undefined);
+    router.push(`/app/project?id=${project!.id}`);
   }
 
   const fe = error?.fields ?? {};
   return (
-    <section className="mb-8 rounded-[var(--radius-card)] border border-border bg-surface p-5" aria-label="Tạo project mới">
+    <section className="mb-8 rounded-[var(--radius-card)] bg-surface p-6" aria-label="Tạo dự án">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <ol className="flex flex-wrap gap-4 text-sm">
+        <ol className="flex flex-wrap gap-6 text-sm">
           {STEPS.map((s, i) => (
-            <li key={s} aria-current={i === step ? "step" : undefined} className={i === step ? "font-semibold" : "text-muted"}>
-              {i + 1}. {s}
+            <li key={s} aria-current={i === step ? "step" : undefined}
+              className={`border-b-2 pb-1 ${i === step ? "border-ink font-medium" : "border-transparent text-faint"}`}>
+              {s}
             </li>
           ))}
         </ol>
@@ -164,7 +169,7 @@ function Wizard({ onClose }: { onClose: () => void }) {
       <div className="grid gap-4 sm:grid-cols-2">
         {step === 0 && (
           <>
-            <Field label="Tên project" value={form.name} onChange={set("name")} placeholder="Ví dụ: Đá nóng tháng 11" error={fe.name} />
+            <Field label="Tên dự án" value={form.name} onChange={set("name")} placeholder="Ví dụ: Đá nóng tháng 11" error={fe.name} />
             <Select label="Mục tiêu" value={form.objective} onChange={set("objective")}>
               {Object.entries(OBJECTIVE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </Select>
@@ -185,12 +190,16 @@ function Wizard({ onClose }: { onClose: () => void }) {
         {step === 2 && (
           <>
             <div className="sm:col-span-2">
-              <Field label="Brief chiến dịch" textarea rows={5} value={form.brief} onChange={set("brief")}
-                placeholder="Muốn đẩy dịch vụ gì, ưu đãi gì (nếu có), thông điệp mong muốn, điều không được nói…" />
+              {project && <UploadZone projectId={project.id} onUploaded={(names) => setFiles((f) => [...f, ...names])} />}
+              {files.length > 0 && <p className="mt-2 text-sm text-muted">Đã tải lên: {files.join(", ")}</p>}
             </div>
             <div className="sm:col-span-2">
-              <Field label="Nguồn để AI nghiên cứu (mỗi dòng một link)" textarea rows={3} value={form.research_urls} onChange={set("research_urls")}
-                hint="Trang/fanpage công khai của đối thủ, bài báo ngành. AI chỉ trích dẫn từ các nguồn này." error={fe.research_urls} />
+              <Field label="Mô tả ngắn (tuỳ chọn)" textarea rows={3} value={form.brief} onChange={set("brief")}
+                placeholder="Muốn đẩy dịch vụ gì, ưu đãi gì, điều không được nói… Nếu đã có tài liệu thì có thể bỏ qua." />
+            </div>
+            <div className="sm:col-span-2">
+              <Field label="Link tham khảo (tuỳ chọn, mỗi dòng một link)" textarea rows={2} value={form.research_urls} onChange={set("research_urls")}
+                hint="Fanpage hoặc website công khai của đối thủ, bài báo ngành, để AI nghiên cứu." error={fe.research_urls} />
             </div>
           </>
         )}
@@ -198,7 +207,7 @@ function Wizard({ onClose }: { onClose: () => void }) {
       {error && !Object.keys(fe).length && <div className="mt-4"><ErrorNote error={error} /></div>}
       <div className="mt-5 flex items-center gap-2">
         <Button variant="primary" onClick={next} disabled={!form.name.trim()}>
-          {step < STEPS.length - 1 ? "Tiếp tục" : "Mở project"}
+          {step < STEPS.length - 1 ? "Tiếp tục" : "Tạo dự án"}
         </Button>
         {step > 0 && <Button variant="ghost" onClick={() => setStep(step - 1)}>Quay lại</Button>}
         <Button variant="ghost" onClick={onClose} className="ml-auto">Đóng</Button>

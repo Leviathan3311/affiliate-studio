@@ -52,8 +52,8 @@ function NavLink({
       href={href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      className={`flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors duration-150 ${
-        active ? "bg-active font-medium text-ink" : "text-muted hover:bg-raised hover:text-ink"
+      className={`flex h-[34px] items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors duration-150 ${
+        active ? "font-medium text-ink" : "text-faint hover:text-ink"
       }`}
     >
       <Icon className="size-4" strokeWidth={1.6} aria-hidden />
@@ -164,7 +164,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </aside>
       {menu && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal aria-label="Menu">
-          <button className="absolute inset-0 bg-black/30" aria-label="Đóng menu" onClick={() => setMenu(false)} />
+          <button className="absolute inset-0 bg-black/60" aria-label="Đóng menu" onClick={() => setMenu(false)} />
           <div className="absolute inset-y-0 left-0 w-72 bg-ground">
             <button
               onClick={() => setMenu(false)}
@@ -194,7 +194,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
           <Notifications />
         </header>
-        <main className="min-w-0 flex-1 bg-surface p-4 sm:p-6 lg:rounded-[var(--radius-sheet)] lg:border lg:border-[#eceae8]">
+        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:border-l lg:border-t lg:border-rule lg:rounded-tl-[var(--radius-sheet)]">
           {children}
         </main>
       </div>

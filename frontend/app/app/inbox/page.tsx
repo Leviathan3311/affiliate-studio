@@ -193,9 +193,9 @@ function Thread({ id, onBack, onChanged }: { id: string; onBack: () => void; onC
         <ol className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
           {c.messages.map((m) => (
             <li key={m.id} className={`flex ${m.direction === "out" ? "justify-end" : ""}`}>
-              <div className={`max-w-[75%] rounded-2xl px-3.5 py-2 ${m.direction === "out" ? "bg-ink text-white" : "bg-raised"}`}>
+              <div className={`max-w-[75%] rounded-2xl px-3.5 py-2 ${m.direction === "out" ? "bg-ink text-ground" : "bg-raised"}`}>
                 <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
-                <p className={`mt-1 text-xs ${m.direction === "out" ? "text-white/70" : "text-muted"}`}>
+                <p className={`mt-1 text-xs ${m.direction === "out" ? "text-ground/70" : "text-muted"}`}>
                   {time(m.created_at)}
                   {m.direction === "out" && ` · ${{ human: "Nhân viên", ai: "AI", system: "Tin mẫu ngoài giờ", customer: "" }[m.actor]}`}
                   {m.provider_status === "dry_run" && " · chế độ thử (chưa gửi Meta)"}
@@ -227,7 +227,7 @@ function Thread({ id, onBack, onChanged }: { id: string; onBack: () => void; onC
             }}
             rows={3}
             placeholder={`Trả lời ${c.customer_name}…`}
-            className="w-full resize-none rounded-[var(--radius-control)] border border-control px-3 py-2 leading-relaxed focus:border-ink focus:outline-none"
+            className="w-full resize-none rounded-[var(--radius-input)] border border-control px-3 py-2 leading-relaxed focus:border-ink focus:outline-none"
           />
           <div className="mt-2 flex items-center justify-between gap-2">
             <span className="text-xs text-muted">Ctrl/⌘ + Enter để gửi</span>

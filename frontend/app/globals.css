@@ -1,33 +1,37 @@
 @import "tailwindcss";
 
-/* Framed-sheet app style (taste-skill seed 110599336). Face: frame tinted a warm stone from the
-   spa's world; the one data hue is a muted rose instead of the dealt teal. */
+/* True-black flat app style (taste-skill seed 2105935175), warm: ground a near-black with the spa's
+   temperature, elevation by lightness alone (ground → surface → raised), no borders or shadows on
+   cards. The one data hue is the brand rose; it never fills buttons, tabs or nav. Primary control =
+   inversion (light pill, dark text). */
 :root {
-  --ground: #f7f5f3;
-  --surface: #ffffff;
-  --raised: #f4f2f0;
-  --active: #ebe8e5;
-  --border: #e9e6e3;
-  --rule: #f1efed;
-  --control: #cfccc9;
-  --text: #141313;
-  --muted: #5f5b58;
-  --accent: #a3315a;
-  --accent-ink: #ffffff;
-  --positive: #1e7b4f;
-  --negative: #c4242a;
-  --warning: #92400e;
-  --chart-1: #a3315a;
-  --pill-positive-bg: #dcfae5;
-  --pill-positive-ink: #04250e;
-  --pill-negative-bg: #ffedea;
-  --pill-negative-ink: #831c1e;
-  --pill-warning-bg: #fffbeb;
-  --pill-warning-ink: #92400e;
-  --pill-neutral-bg: #ebe8e5;
-  --pill-neutral-ink: #353331;
-  --pill-accent-bg: #fbe9f0;
-  --pill-accent-ink: #6d1d3b;
+  color-scheme: dark;
+  --ground: #0e0d0c;
+  --surface: #181716;
+  --raised: #262422;
+  --active: #33302d;
+  --border: #2a2725;
+  --rule: #211f1d;
+  --control: #4a4643;
+  --text: #f5f3f1;
+  --muted: #b4b0ac;
+  --faint: #96928e;
+  --accent: #f0789e;
+  --accent-ink: #0e0d0c;
+  --positive: #6fd39a;
+  --negative: #f06a6e;
+  --warning: #e5a93b;
+  --chart-1: #f0789e;
+  --pill-positive-bg: #17291f;
+  --pill-positive-ink: #7fe0a8;
+  --pill-negative-bg: #321b1d;
+  --pill-negative-ink: #f58b8e;
+  --pill-warning-bg: #2b2414;
+  --pill-warning-ink: #e9b65a;
+  --pill-neutral-bg: #2a2725;
+  --pill-neutral-ink: #e9e6e3;
+  --pill-accent-bg: #3a1c27;
+  --pill-accent-ink: #f8a3bf;
 }
 
 @theme inline {
@@ -40,14 +44,16 @@
   --color-control: var(--control);
   --color-ink: var(--text);
   --color-muted: var(--muted);
+  --color-faint: var(--faint);
   --color-accent: var(--accent);
   --color-positive: var(--positive);
   --color-negative: var(--negative);
   --color-warning: var(--warning);
   --font-sans: var(--font-plex), system-ui, sans-serif;
-  --radius-card: 8px;
-  --radius-control: 6px;
-  --radius-sheet: 16px;
+  --radius-card: 20px;
+  --radius-control: 999px;
+  --radius-input: 12px;
+  --radius-sheet: 20px;
 }
 
 html,
@@ -73,5 +79,19 @@ body {
   *::after {
     transition-duration: 0ms !important;
     animation-duration: 0ms !important;
+  }
+}
+
+@layer base {
+  /* Native fields sit one step darker than the card they are on. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    background-color: var(--ground);
+    color: var(--text);
+  }
+  ::selection {
+    background: var(--pill-accent-bg);
+    color: var(--text);
   }
 }

@@ -184,7 +184,7 @@ function Profile({ id, onBack, onChanged }: { id: string; onBack: () => void; on
                 Mở hội thoại
               </Link>
             )}
-            <Link href={`/app/bookings?new=1&customer=${c.id}`} className="inline-flex h-9 items-center rounded-[var(--radius-control)] bg-ink px-3 text-sm font-medium text-white">
+            <Link href={`/app/bookings?new=1&customer=${c.id}`} className="inline-flex h-9 items-center rounded-[var(--radius-control)] bg-ink px-3 text-sm font-medium text-ground">
               Tạo lịch hẹn
             </Link>
           </>

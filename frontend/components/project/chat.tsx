@@ -53,16 +53,16 @@ export function ProjectChat({
   const msgs = history.data ?? [];
   const context = open?.kind === "script" ? open.display_name : null;
   return (
-    <div className="flex-none border-t border-rule bg-surface">
+    <div className="flex-none border-t border-rule bg-ground">
       {expanded && (
         <ol className="max-h-72 space-y-3 overflow-y-auto px-4 pt-3" aria-live="polite">
           {msgs.length === 0 && <li className="text-sm text-muted">Hỏi AI về project, yêu cầu nghiên cứu, viết hoặc sửa kịch bản.</li>}
           {msgs.map((m) => (
             <li key={m.id} className={`flex ${m.role === "user" ? "justify-end" : ""}`}>
-              <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.role === "user" ? "bg-ink text-white" : "bg-raised"}`}>
+              <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.role === "user" ? "bg-ink text-ground" : "bg-raised"}`}>
                 <p className="whitespace-pre-wrap">{m.content}</p>
                 {m.action?.type === "propose_generation" && m.action.script_artifact_id && (
-                  <Button className="mt-2 h-8 bg-surface text-xs" onClick={() => onProposeGenerate(m.action!.script_artifact_id!)}>
+                  <Button variant="primary" className="mt-2 h-8 text-xs" onClick={() => onProposeGenerate(m.action!.script_artifact_id!)}>
                     Xem lại và tạo ảnh & video
                   </Button>
                 )}
@@ -77,7 +77,7 @@ export function ProjectChat({
         <div className="mb-1.5 flex items-center justify-between text-xs text-muted">
           <span className="flex items-center gap-1.5">
             <Sparkles className="size-3.5 text-accent" aria-hidden />
-            {context ? `Đang trao đổi về: ${context}` : "Trợ lý project (Gemini)"}
+            {context ? `Đang trao đổi về: ${context}` : "Trợ lý AI của dự án"}
           </span>
           <button onClick={() => setExpanded((v) => !v)} className="flex cursor-pointer items-center gap-1 hover:text-ink" aria-expanded={expanded}>
             {expanded ? <ChevronDown className="size-3.5" /> : <ChevronUp className="size-3.5" />}
@@ -89,7 +89,7 @@ export function ProjectChat({
           <textarea id="project-chat" value={text} onChange={(e) => setText(e.target.value)} rows={2}
             onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); }}
             placeholder={context ? "Ví dụ: rút hook ngắn hơn, nhấn mạnh ưu đãi lần đầu" : "Ví dụ: nghiên cứu đối thủ rồi viết 3 kịch bản"}
-            className="min-w-0 flex-1 resize-none rounded-[var(--radius-control)] border border-control px-3 py-2 text-sm focus:border-ink focus:outline-none" />
+            className="min-w-0 flex-1 resize-none rounded-[var(--radius-input)] border border-control bg-surface px-3 py-2 text-sm focus:border-ink focus:outline-none" />
           <Button variant="primary" onClick={send} busy={busy} disabled={!text.trim()} className="self-end">Gửi</Button>
         </div>
       </div>

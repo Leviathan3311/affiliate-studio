@@ -60,11 +60,11 @@ export function Library({
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between px-4 pt-4">
-        <h2 className="font-semibold">Các phương án</h2>
+        <h2 className="font-semibold">Thư viện</h2>
         <div role="tablist" aria-label="Lọc thư viện" className="flex gap-3 text-sm">
           {(["all", "selected"] as const).map((f) => (
             <button key={f} role="tab" aria-selected={filter === f} onClick={() => onFilter(f)}
-              className={`cursor-pointer border-b-2 pb-0.5 ${filter === f ? "border-accent font-medium" : "border-transparent text-muted"}`}>
+              className={`cursor-pointer border-b-2 pb-0.5 ${filter === f ? "border-ink font-medium" : "border-transparent text-faint hover:text-ink"}`}>
               {f === "all" ? "Tất cả" : "Đã chọn"}
             </button>
           ))}
@@ -76,7 +76,7 @@ export function Library({
           if (!items.length) return null;
           return (
             <section key={kind} className="mt-4">
-              <h3 className="px-2 text-xs text-muted">{label} · {items.length}</h3>
+              <h3 className="px-2 text-xs text-faint">{label} · {items.length}</h3>
               <ul className="mt-1">
                 {items.map((a) => (
                   <li key={a.id}>
@@ -100,8 +100,8 @@ export function Library({
 function Card({ a, active, onClick }: { a: Artifact; active: boolean; onClick: () => void }): ReactNode {
   return (
     <button onClick={onClick} aria-current={active ? "true" : undefined}
-      className={`flex w-full cursor-pointer items-center gap-3 rounded-lg p-2 text-left transition-colors duration-150 ${active ? "bg-active" : "hover:bg-raised"}`}>
-      <Thumb a={a} className="size-11 flex-none rounded-md" />
+      className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl p-2 text-left transition-colors duration-150 ${active ? "bg-surface" : "hover:bg-surface"}`}>
+      <Thumb a={a} className="size-11 flex-none rounded-xl" />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1">
           {a.pinned && <Pin className="size-3 flex-none text-muted" aria-label="Đã ghim" />}
@@ -109,7 +109,7 @@ function Card({ a, active, onClick }: { a: Artifact; active: boolean; onClick: (
         </span>
         <span className="mt-1 flex items-center gap-2">
           <Pill tone={statusTone(a.status)}>{ARTIFACT_STATUS[a.status]}</Pill>
-          <span className="truncate text-xs text-muted">v{a.version_count || 1} · {ago(a.updated_at ?? a.created_at)}</span>
+          <span className="truncate text-xs text-faint">{ago(a.updated_at ?? a.created_at)}</span>
         </span>
       </span>
     </button>

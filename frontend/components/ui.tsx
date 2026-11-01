@@ -6,9 +6,9 @@ import { useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactN
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-ink text-white hover:bg-black/80",
-  secondary: "bg-active text-ink hover:bg-control/70",
-  ghost: "text-ink hover:bg-raised",
+  primary: "bg-ink text-ground hover:bg-ink/85",
+  secondary: "bg-raised text-ink hover:bg-active",
+  ghost: "text-muted hover:bg-raised hover:text-ink",
   danger: "text-negative hover:bg-[var(--pill-negative-bg)]",
 };
 
@@ -24,7 +24,7 @@ export function Button({
       {...props}
       disabled={props.disabled || busy}
       aria-busy={busy || undefined}
-      className={`inline-flex h-9 min-w-9 cursor-pointer items-center justify-center gap-1.5 rounded-[var(--radius-control)] px-3 text-sm font-medium transition-colors duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`inline-flex h-9 min-w-9 cursor-pointer items-center justify-center gap-1.5 rounded-[var(--radius-control)] px-4 text-sm font-medium transition-colors duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
     >
       {busy && <Loader2 className="size-4 animate-spin" aria-hidden />}
       {children}
@@ -33,7 +33,7 @@ export function Button({
 }
 
 const inputCls =
-  "w-full rounded-[var(--radius-control)] border border-control bg-surface px-3 text-sm text-ink placeholder:text-muted/70 focus:border-ink focus:outline-none aria-[invalid=true]:border-negative";
+  "w-full rounded-[var(--radius-input)] border border-control bg-ground px-3 text-sm text-ink placeholder:text-faint focus:border-ink focus:outline-none aria-[invalid=true]:border-negative";
 
 export function Field({
   label,
@@ -133,14 +133,14 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={`min-w-0 rounded-[var(--radius-card)] border border-border bg-surface ${className}`}>
+    <section className={`min-w-0 rounded-[var(--radius-card)] bg-surface ${className}`}>
       {(title || action) && (
-        <header className="flex min-h-12 items-center justify-between gap-3 px-5 pt-3">
+        <header className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-[22px] pt-4">
           {title && <h2 className="text-base font-semibold">{title}</h2>}
           {action}
         </header>
       )}
-      <div className="px-5 pb-5 pt-2">{children}</div>
+      <div className="px-[22px] pb-[22px] pt-2">{children}</div>
     </section>
   );
 }
@@ -183,7 +183,7 @@ export function Skeleton({ rows = 3 }: { rows?: number }) {
   return (
     <div className="space-y-3" aria-hidden>
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="h-4 animate-pulse rounded bg-raised" style={{ width: `${90 - i * 12}%` }} />
+        <div key={i} className="h-4 animate-pulse rounded-full bg-raised" style={{ width: `${90 - i * 12}%` }} />
       ))}
     </div>
   );
@@ -210,6 +210,33 @@ export function Initials({ name, size = 32 }: { name: string; size?: number }) {
       }}
     >
       {letters || "?"}
+    </span>
+  );
+}
+
+/** Modal sheet: the one surface allowed a shadow, since it truly floats. Esc and the backdrop close it. */
+export function Dialog({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+  const id = useId();
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal aria-labelledby={id}
+      onKeyDown={(e) => e.key === "Escape" && onClose()}>
+      <button className="absolute inset-0 cursor-default bg-black/70" aria-label="Đóng" onClick={onClose} tabIndex={-1} />
+      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[var(--radius-sheet)] bg-surface p-6 shadow-2xl shadow-black/60">
+        <h2 id={id} className="text-lg font-semibold">{title}</h2>
+        <div className="mt-2">{children}</div>
+        {footer && <div className="mt-6 flex justify-end gap-2">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** Thin progress bar in the data hue. */
+export function Progress({ value, label }: { value: number; label: string }) {
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  return (
+    <span role="progressbar" aria-label={label} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}
+      className="block h-1.5 w-full overflow-hidden rounded-full bg-raised">
+      <span className="block h-full rounded-full bg-accent transition-[width] duration-700" style={{ width: `${Math.max(pct, 3)}%` }} />
     </span>
   );
 }
