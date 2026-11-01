@@ -42,8 +42,9 @@ HERE = Path(os.environ.get("GP_NOTEBOOK_DIR", "/kaggle/input/growthpilot-worker"
 COMFY = Path("/kaggle/working/ComfyUI")
 GPU_SERVERS = {"image": "http://127.0.0.1:8188", "audio": "http://127.0.0.1:8188", "video": "http://127.0.0.1:8189"}
 
-# "4b" is safe for commercial use; switch to "9b" only with a BFL licence or for internal tests.
-FLUX_VARIANT = os.environ.get("GP_FLUX_VARIANT", "4b")
+# Owner's decision (Nov 2026): non-commercial internal use, so the higher-quality 9B is the default.
+# FLUX.2 klein 9B is FLUX Non-Commercial; set GP_FLUX_VARIANT=4b (Apache-2.0) before selling the service.
+FLUX_VARIANT = os.environ.get("GP_FLUX_VARIANT", "9b")
 FLUX = {
     "4b": [
         ("unsloth/FLUX.2-klein-4B-GGUF", "flux-2-klein-4b-Q8_0.gguf", "diffusion_models"),  # 4.3 GB
