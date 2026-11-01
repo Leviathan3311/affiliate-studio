@@ -233,7 +233,9 @@ def comfy_run(name: str, modality: str, values: dict, out: Path, timeout: int = 
 # %%
 W, H = 1080, 1920
 GEN_W = 1088  # FLUX.2 latents need multiples of 16; cropped back to W
-VIDEO_W, VIDEO_H = 480, 864  # MiniMax H3 on a T4 (multiples of 32); stage_mix scales to W x H
+# MiniMax H3 on a T4 (multiples of 32); stage_mix scales to W x H. 480x864 took ~0.2 min per frame
+# (a 6 s shot ~30 min); 320x576 has 44% of the pixels, trading fine detail for ~2x speed.
+VIDEO_W, VIDEO_H = 320, 576
 
 
 def h3_frames(seconds: float) -> int:
