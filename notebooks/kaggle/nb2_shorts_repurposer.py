@@ -27,6 +27,7 @@ FACE_WEIGHTS = ("arnabdhar/YOLOv8-Face-Detection", "model.pt")  # CONFIRM or swa
 OUT_W, OUT_H = 1080, 1920
 EMA_ALPHA = 0.12  # lower = smoother "cameraman" pan
 
+WORKER = Worker(["shorts"])  # checks secrets before installing anything
 if not DRY_RUN:
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "whisperx", "google-genai",
                     "ultralytics", "opencv-python-headless", "huggingface_hub"], check=True)
@@ -248,4 +249,4 @@ def handle(w: Worker, job: dict, d: Path) -> dict:
 
 # %%
 if __name__ == "__main__" or "ipykernel" in sys.modules:
-    Worker(["shorts"]).run(handle, max_idle_minutes=float(os.environ.get("GP_MAX_IDLE_MIN", 60)))
+    WORKER.run(handle, max_idle_minutes=float(os.environ.get("GP_MAX_IDLE_MIN", 60)))

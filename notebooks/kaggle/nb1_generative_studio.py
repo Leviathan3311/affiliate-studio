@@ -267,6 +267,7 @@ def handle(w: Worker, job: dict, d: Path) -> dict:
 
 # %%
 if __name__ == "__main__" or "ipykernel" in sys.modules:
+    worker = Worker(["studio"])  # checks secrets before the long model download
     if not DRY_RUN:
         setup()
-    Worker(["studio"]).run(handle, max_idle_minutes=float(os.environ.get("GP_MAX_IDLE_MIN", 60)))
+    worker.run(handle, max_idle_minutes=float(os.environ.get("GP_MAX_IDLE_MIN", 60)))

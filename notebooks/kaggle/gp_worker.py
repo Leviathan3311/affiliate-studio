@@ -37,8 +37,12 @@ class Cancelled(Exception):
 
 class Worker:
     def __init__(self, kinds: list[str], workdir: str = "/kaggle/working/gp"):
-        self.api = (secret("GP_API_URL") or "").rstrip("/") + "/api/v1/worker"
-        self.headers = {"Authorization": f"Bearer {secret('MEDIA_WORKER_TOKEN')}"}
+        api_url, token = secret("GP_API_URL"), secret("MEDIA_WORKER_TOKEN")
+        if not api_url or not token:
+            # Fail fast: without these the notebook would download ~60 GB and idle on GPU quota.
+            raise SystemExit("Missing Kaggle secrets GP_API_URL / MEDIA_WORKER_TOKEN (Add-ons -> Secrets).")
+        self.api = api_url.rstrip("/") + "/api/v1/worker"
+        self.headers = {"Authorization": f"Bearer {token}"}
         self.kinds = kinds
         self.worker_id = f"{socket.gethostname()}-{'-'.join(kinds)}"
         self.workdir = Path(os.environ.get("GP_WORKDIR", workdir))

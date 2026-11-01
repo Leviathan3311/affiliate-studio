@@ -59,6 +59,7 @@ def main() -> None:
             "kernel_type": "notebook",
             "is_private": True,
             "enable_gpu": True,
+            "machine_shape": "NvidiaTeslaT4",  # Kaggle "GPU T4 x2"
             "enable_internet": True,
             "dataset_sources": [DATASET],
             "competition_sources": [],
