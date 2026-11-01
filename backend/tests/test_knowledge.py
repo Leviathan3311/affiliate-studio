@@ -16,6 +16,7 @@ def fake_rag(monkeypatch):
 
     async def insert(ws, doc_id, text):
         calls.append(("insert", doc_id))
+        return not doc_id.startswith("knowledge:fail")
 
     async def delete(ws, doc_id):
         calls.append(("delete", doc_id))
@@ -47,7 +48,7 @@ def test_sync_reindexes_only_changes(client, db, fake_rag):
 
     first = knowledge.sync(db, ws)
     db.commit()
-    assert first == {"changed": 3, "removed": 0}  # brand + service + faq
+    assert first == {"changed": 3, "removed": 0, "failed": 0}  # brand + service + faq
     assert knowledge.sync(db, ws) == {
         "changed": 0,
         "removed": 0,
@@ -61,7 +62,7 @@ def test_sync_reindexes_only_changes(client, db, fake_rag):
     )
     client.delete(f"/api/v1/knowledge/{faq['id']}", headers=h)
     db.expire_all()
-    assert knowledge.sync(db, ws) == {"changed": 1, "removed": 1}
+    assert knowledge.sync(db, ws) == {"changed": 1, "removed": 1, "failed": 0}
     db.commit()
     assert fake_rag == [
         ("delete", f"knowledge:{faq['id']}"),
@@ -88,3 +89,24 @@ def test_prompt_template_renders_langfuse_placeholders():
         SYSTEM_PROMPT, brand="Lotus", tone="nhẹ nhàng", forbidden="không hứa", intents="a|b"
     )
     assert '"Lotus"' in out and "{{" not in out and '{"intent": one of a|b' in out
+
+
+def test_failed_extraction_is_retried(client, db, fake_rag, monkeypatch):
+    import uuid
+
+    h = signup(client)
+    ws = uuid.UUID(h["X-Workspace-Id"])
+    outcomes = iter([False, True])  # Gemini overloaded once, then fine
+
+    async def flaky(ws_id, doc_id, text):
+        return next(outcomes) if doc_id.startswith("knowledge:") else True
+
+    monkeypatch.setattr(knowledge, "_insert", flaky)
+    client.post(
+        "/api/v1/knowledge",
+        headers=h,
+        json={"title": "Peel", "content": "Không dùng khi mang thai"},
+    )
+    assert knowledge.sync(db, ws)["failed"] == 1
+    db.commit()
+    assert knowledge.sync(db, ws) == {"changed": 1, "removed": 0, "failed": 0}

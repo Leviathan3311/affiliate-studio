@@ -183,15 +183,18 @@ def sync(db: Session, workspace_id: uuid.UUID) -> dict[str, int]:
     rt = _runtime()
     for doc_id in removed + [k for k in changed if k in state]:
         rt.run(_delete(workspace_id, doc_id), timeout=300)
+    failed = 0
     for doc_id in changed:
-        rt.run(_insert(workspace_id, doc_id, current[doc_id]), timeout=900)
+        if not rt.run(_insert(workspace_id, doc_id, current[doc_id]), timeout=900):
+            failed += 1  # no state row: the next sync retries it (Gemini overloads are transient)
+            continue
         row = state.get(doc_id) or KnowledgeSyncState(workspace_id=workspace_id, doc_id=doc_id)
         row.content_hash, row.synced_at = hashes[doc_id], utcnow()
         db.add(row)
     for doc_id in removed:
         db.delete(state[doc_id])
     db.flush()
-    return {"changed": len(changed), "removed": len(removed)}
+    return {"changed": len(changed) - failed, "removed": len(removed), "failed": failed}
 
 
 # ---------- layer 2: LightRAG runtime ----------
@@ -313,12 +316,20 @@ async def _query(workspace_id: uuid.UUID, query: str) -> str:
     from lightrag import QueryParam
 
     rag = await _rag(workspace_id)
-    return await rag.aquery(query, param=QueryParam(mode="hybrid", only_need_context=True))
+    # Keywords supplied up front skip LightRAG's LLM keyword-extraction call: a customer reply then
+    # costs one embedding + Postgres queries, not an extra (rate-limited) Gemini request.
+    param = QueryParam(
+        mode="hybrid", only_need_context=True, hl_keywords=[query], ll_keywords=[query]
+    )
+    return await rag.aquery(query, param=param)
 
 
-async def _insert(workspace_id: uuid.UUID, doc_id: str, text: str) -> None:
+async def _insert(workspace_id: uuid.UUID, doc_id: str, text: str) -> bool:
+    """True when LightRAG finished extraction (it records failures instead of raising)."""
     rag = await _rag(workspace_id)
     await rag.ainsert(text, ids=[doc_id], file_paths=[doc_id])
+    status = (await rag.doc_status.get_by_id(doc_id) or {}).get("status")
+    return str(getattr(status, "value", status)).lower() == "processed"
 
 
 async def _delete(workspace_id: uuid.UUID, doc_id: str) -> None:
