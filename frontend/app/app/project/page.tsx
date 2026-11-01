@@ -1,12 +1,12 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Library as LibraryIcon, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Library as LibraryIcon, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { ProjectChat } from "@/components/project/chat";
+import { type ChatScope, ProjectChat } from "@/components/project/chat";
 import { ContextCard, InputsSection } from "@/components/project/inputs";
-import { Library } from "@/components/project/library";
+import { DeleteButton, Library } from "@/components/project/library";
 import { JobStrip, MediaSection, MediaView } from "@/components/project/media";
 import { PublishSection } from "@/components/project/publish";
 import { ReportView, ResearchSection } from "@/components/project/research";
@@ -30,6 +30,8 @@ const SECTIONS: { id: Section; label: string }[] = [
 ];
 const SECTION_OF: Record<Artifact["kind"], Section> = { research: "research", script: "scripts", image: "media", video: "media", short: "shorts" };
 const MEDIA: Artifact["kind"][] = ["image", "video", "short"];
+// The script assistant covers everything up to the chosen script; the media one, what comes after.
+const SCOPE_OF: Record<Section, ChatScope> = { overview: "script", inputs: "script", research: "script", scripts: "script", media: "media", shorts: "media", publish: "media" };
 const BACK: Record<Artifact["kind"], string> = { script: "Tất cả kịch bản", research: "Báo cáo mới nhất", image: "Tất cả ảnh & video", video: "Tất cả ảnh & video", short: "Tất cả Shorts" };
 
 export default function ProjectPage() {
@@ -51,8 +53,9 @@ function Workspace() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "selected">("all");
   const [compare, setCompare] = useState<string[]>([]);
-  const [generateFor, setGenerateFor] = useState<string | null>(null);
-  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [generateFor, setGenerateFor] = useState<{ id: string; note?: string } | null>(null);
+  const [panel, setPanel] = useState<"chat" | "library">("chat");
+  const [panelOpen, setPanelOpen] = useState(false); // below xl the side panel is an overlay
   const [reading, setReading] = useState(false);
   const [openedAt] = useState(() => Date.now());
 
@@ -77,7 +80,7 @@ function Workspace() {
   const openArtifact = (a: Artifact) => {
     setOpenId(a.id);
     setSection(SECTION_OF[a.kind]);
-    setLibraryOpen(false);
+    setPanelOpen(false);
   };
   async function reread() {
     if (!project.data) return;
@@ -96,6 +99,11 @@ function Workspace() {
   const scripts = all.filter((a) => a.kind === "script");
   const selected = scripts.find((a) => a.status === "selected");
   const next = nextStep(p, all, jobList);
+  const showPanel = (which: "chat" | "library") => {
+    setPanel(which);
+    setPanelOpen(true);
+  };
+  const generating = generateFor && all.find((a) => a.id === generateFor.id);
 
   return (
     <div className="-m-4 flex h-[calc(100vh-48px)] flex-col sm:-m-6">
@@ -115,9 +123,14 @@ function Workspace() {
             </Button>
           </span>
         )}
-        <Button variant="ghost" className="xl:hidden" onClick={() => setLibraryOpen(true)} aria-label="Mở thư viện">
-          <LibraryIcon className="size-4" /> <span className="hidden sm:inline">Thư viện</span>
-        </Button>
+        <span className="flex gap-1 xl:hidden">
+          <Button variant="ghost" onClick={() => showPanel("chat")} aria-label="Mở trợ lý AI">
+            <Sparkles className="size-4" /> <span className="hidden sm:inline">Trợ lý AI</span>
+          </Button>
+          <Button variant="ghost" onClick={() => showPanel("library")} aria-label="Mở thư viện">
+            <LibraryIcon className="size-4" /> <span className="hidden sm:inline">Thư viện</span>
+          </Button>
+        </span>
       </header>
 
       <nav aria-label="Các bước của dự án" className="mt-3 flex flex-none gap-6 overflow-x-auto border-b border-rule px-4 [scrollbar-width:none] sm:px-7">
@@ -135,8 +148,7 @@ function Workspace() {
       </nav>
 
       <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <main className="min-h-0 flex-1 space-y-[14px] overflow-y-auto px-4 py-5 sm:px-7">
+        <main className="min-h-0 min-w-0 flex-1 space-y-[14px] overflow-y-auto px-4 py-5 sm:px-7">
             <JobStrip jobs={jobList} onChanged={refresh} />
             {open && (
               <button onClick={() => setOpenId(null)}
@@ -153,28 +165,39 @@ function Workspace() {
               : <ResearchSection project={p} reports={all.filter((a) => a.kind === "research")} onChanged={refresh} />)}
             {section === "scripts" && (
               <ScriptsSection project={p} scripts={scripts} open={open?.kind === "script" ? open : null} compare={compare}
-                setCompare={setCompare} onOpen={openArtifact} onChanged={refresh} onGenerate={setGenerateFor} />
+                setCompare={setCompare} onOpen={openArtifact} onChanged={refresh} onGenerate={(sid) => setGenerateFor({ id: sid })} />
             )}
             {(section === "media" || section === "shorts") && (open && MEDIA.includes(open.kind)
               ? <MediaView a={open} onChanged={refresh} />
               : <MediaSection project={p} items={all} jobs={jobList} kinds={section === "shorts" ? ["short"] : ["image", "video"]}
-                  onOpen={openArtifact} onChanged={refresh} onRetry={selected ? () => setGenerateFor(selected.id) : undefined} />)}
+                  onOpen={openArtifact} onChanged={refresh} onRetry={selected ? () => setGenerateFor({ id: selected.id }) : undefined} />)}
             {section === "publish" && <PublishSection project={p} artifacts={all} />}
-          </main>
-          <ProjectChat projectId={p.id} open={open} onChanged={refresh} onProposeGenerate={setGenerateFor} />
-        </div>
+        </main>
 
-        <aside aria-label="Thư viện"
-          className={`${libraryOpen ? "fixed inset-0 z-40 block bg-ground" : "hidden"} xl:static xl:block xl:w-[300px] xl:flex-none xl:border-l xl:border-rule`}>
-          <div className="flex justify-end p-2 xl:hidden">
-            <Button variant="ghost" onClick={() => setLibraryOpen(false)} aria-label="Đóng"><X className="size-4" /></Button>
+        <aside aria-label="Trợ lý AI và thư viện"
+          className={`${panelOpen ? "fixed inset-0 z-40 flex bg-ground" : "hidden"} flex-col xl:static xl:flex xl:w-[360px] xl:flex-none xl:border-l xl:border-rule`}>
+          <div role="tablist" aria-label="Bảng bên" className="flex h-11 flex-none items-center gap-5 border-b border-rule px-4">
+            {([["chat", "Trợ lý AI"], ["library", `Thư viện · ${all.length}`]] as const).map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={panel === id} onClick={() => setPanel(id)}
+                className={`-mb-px h-11 cursor-pointer border-b-2 text-sm transition-colors ${panel === id ? "border-ink font-medium text-ink" : "border-transparent text-faint hover:text-ink"}`}>
+                {label}
+              </button>
+            ))}
+            <Button variant="ghost" className="ml-auto xl:hidden" onClick={() => setPanelOpen(false)} aria-label="Đóng"><X className="size-4" /></Button>
           </div>
-          <Library artifacts={all} openId={openId} onOpen={openArtifact} filter={filter} onFilter={setFilter} />
+          <div className="min-h-0 flex-1">
+            {panel === "chat" ? (
+              <ProjectChat key={SCOPE_OF[section]} projectId={p.id} scope={SCOPE_OF[section]} open={open} onChanged={refresh}
+                onProposeGenerate={(sid, note) => setGenerateFor({ id: sid, note })} />
+            ) : (
+              <Library artifacts={all} openId={openId} onOpen={openArtifact} onChanged={refresh} filter={filter} onFilter={setFilter} />
+            )}
+          </div>
         </aside>
       </div>
 
-      {generateFor && all.find((a) => a.id === generateFor) && (
-        <GenerateDialog project={p} script={all.find((a) => a.id === generateFor)!} onClose={() => setGenerateFor(null)}
+      {generating && (
+        <GenerateDialog project={p} script={generating} note={generateFor.note} onClose={() => setGenerateFor(null)}
           onQueued={() => { refresh(); go("media"); }} />
       )}
     </div>
@@ -190,9 +213,9 @@ function nextStep(p: Project, all: Artifact[], jobs: MediaJob[]): Next | null {
   const rendering = jobs.some((j) => j.kind === "studio" && (j.status === "queued" || j.status === "running"));
   if (!has("research")) return { label: "Nghiên cứu thị trường", why: "AI tìm hiểu khách hàng, đối thủ và xu hướng trước khi viết.", section: "research" };
   if (!has("script")) return { label: "Viết kịch bản", why: "AI viết 3 phương án kịch bản video từ nghiên cứu.", section: "scripts" };
-  if (!has("script", "selected")) return { label: "Chọn kịch bản", why: "Mở từng phương án và bấm “Dùng kịch bản này” cho bản ưng nhất.", section: "scripts" };
+  if (!has("script", "selected")) return { label: "Chọn kịch bản", why: "Bấm “Chọn bản này” ở phương án ưng nhất.", section: "scripts" };
   if (rendering) return { label: "Xem tiến độ", why: "Ảnh và video đang được tạo, bạn có thể đóng trang.", section: "media" };
-  if (!has("image") && !has("video")) return { label: "Tạo ảnh & video", why: "Mở kịch bản đã chọn và bấm “Tạo ảnh & video”.", section: "scripts" };
+  if (!has("image") && !has("video")) return { label: "Tạo ảnh & video", why: "Bấm “Tạo ảnh & video” ở kịch bản đã chọn.", section: "scripts" };
   if (!all.some((a) => a.status === "approved")) return { label: "Duyệt ảnh & video", why: "Xem kết quả và duyệt bản sẽ đăng.", section: "media" };
   return { label: "Lên lịch đăng", why: "Đăng ngay hoặc hẹn giờ lên Facebook.", section: "publish" };
 }
@@ -209,7 +232,21 @@ function ScriptsSection({ project, scripts, open, compare, setCompare, onOpen, o
   const [count, setCount] = useState(3);
   const [instruction, setInstruction] = useState("");
   const [busy, setBusy] = useState(false);
+  const [choosing, setChoosing] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+
+  async function choose(s: Artifact) {
+    setChoosing(s.id);
+    setError(null);
+    try {
+      await api(`/artifacts/${s.id}/select`, { method: "POST" });
+      onChanged();
+    } catch (e) {
+      setError(e as ApiError);
+    } finally {
+      setChoosing(null);
+    }
+  }
 
   async function write() {
     setBusy(true);
@@ -241,12 +278,20 @@ function ScriptsSection({ project, scripts, open, compare, setCompare, onOpen, o
                     onChange={(e) => setCompare(e.target.checked ? [...compare, s.id] : compare.filter((x) => x !== s.id))}
                     className="size-4 accent-[var(--text)]" />
                   <button onClick={() => onOpen(s)} className="min-w-0 flex-1 cursor-pointer text-left">
-                    <span className="block truncate font-medium hover:underline">{s.display_name}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="truncate font-medium hover:underline">{s.display_name}</span>
+                      {s.status === "selected" && <Pill tone="accent">Đã chọn</Pill>}
+                    </span>
                     <span className="block truncate text-sm text-faint">
                       {s.status === "generating" ? "AI đang viết…" : c?.hook ? `“${c.hook}” · ${c.duration_seconds} giây` : ""}
                     </span>
                   </button>
-                  {s.status === "selected" && <Pill tone="accent">Đã chọn</Pill>}
+                  {s.status === "selected" ? (
+                    <Button variant="primary" className="h-8 px-3" onClick={() => onGenerate(s.id)}>Tạo ảnh & video</Button>
+                  ) : s.status === "ready" && (
+                    <Button className="h-8 px-3" busy={choosing === s.id} onClick={() => choose(s)}>Chọn bản này</Button>
+                  )}
+                  <DeleteButton a={s} onDeleted={() => { setCompare(compare.filter((x) => x !== s.id)); onChanged(); }} />
                 </li>
               );
             })}

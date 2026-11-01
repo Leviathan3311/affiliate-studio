@@ -50,7 +50,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   if (!state) {
     return (
       <div className="grid min-h-screen place-items-center text-sm text-muted" role="status">
-        Đang tải workspace…
+        Đang tải…
       </div>
     );
   }

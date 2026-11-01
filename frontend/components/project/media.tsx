@@ -6,7 +6,7 @@ import { Button, Empty, ErrorNote, Panel, Pill, Progress } from "@/components/ui
 import { api, ApiError, useApi } from "@/lib/api";
 import { ago, ARTIFACT_STATUS } from "@/lib/format";
 import type { Artifact, MediaJob, Project, ProjectInput } from "@/lib/types";
-import { statusTone, Thumb } from "./library";
+import { DeleteButton, statusTone, Thumb } from "./library";
 
 const JOB_NAME = { studio: "Ảnh & video quảng cáo", shorts: "Cắt Shorts" } as const;
 
@@ -92,23 +92,46 @@ export function MediaSection({
       {kinds.includes("short") && <ShortsLauncher project={project} videos={items.filter((a) => a.kind === "video" && a.current?.url)} onChanged={onChanged} />}
       {!shown.length && (
         <Empty title={kinds.includes("short") ? "Chưa có Shorts" : "Chưa có ảnh/video"}>
-          {kinds.includes("short") ? "Chọn video quảng cáo hoặc video spa tự quay để cắt thành Reels 9:16." : 'Mở một kịch bản, bấm "Dùng kịch bản này" rồi "Tạo ảnh & video".'}
+          {kinds.includes("short") ? "Chọn video quảng cáo hoặc video spa tự quay để cắt thành Reels 9:16." : "Ở mục Kịch bản, bấm “Chọn bản này” rồi “Tạo ảnh & video”."}
         </Empty>
       )}
       <ul className="grid grid-cols-2 gap-[14px] md:grid-cols-3 2xl:grid-cols-4">
         {shown.map((a) => (
-          <li key={a.id}>
-            <button onClick={() => onOpen(a)} className="group block w-full cursor-pointer overflow-hidden rounded-[var(--radius-card)] bg-surface text-left">
+          <li key={a.id} className="overflow-hidden rounded-[var(--radius-card)] bg-surface">
+            <button onClick={() => onOpen(a)} aria-label={`Mở ${a.display_name}`} className="group block w-full cursor-pointer overflow-hidden">
               <Thumb a={a} className="aspect-[9/16] w-full transition-transform duration-300 group-hover:scale-[1.02]" />
-              <span className="block px-4 py-3">
-                <span className="block truncate text-sm font-medium">{a.display_name}</span>
-                <span className="mt-1.5 flex items-center gap-2"><Pill tone={statusTone(a.status)}>{ARTIFACT_STATUS[a.status]}</Pill></span>
-              </span>
             </button>
+            <div className="px-4 pb-3 pt-2.5">
+              <button onClick={() => onOpen(a)} className="block w-full cursor-pointer truncate text-left text-sm font-medium hover:underline">{a.display_name}</button>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <Pill tone={statusTone(a.status)}>{ARTIFACT_STATUS[a.status]}</Pill>
+                <span className="ml-auto flex items-center gap-1">
+                  {(a.status === "ready" || a.status === "selected") && <ApproveButton a={a} onChanged={onChanged} />}
+                  <DeleteButton a={a} onDeleted={onChanged} />
+                </span>
+              </div>
+            </div>
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+function ApproveButton({ a, onChanged }: { a: Artifact; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button className="h-8 px-3" busy={busy} onClick={async () => {
+      setBusy(true);
+      try {
+        await api(`/artifacts/${a.id}/approve`, { method: "POST" });
+        onChanged();
+      } catch (e) {
+        alert((e as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    }}>Duyệt</Button>
   );
 }
 

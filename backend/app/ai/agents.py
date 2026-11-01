@@ -8,7 +8,7 @@ import base64
 import json
 from typing import Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -367,53 +367,91 @@ voiceover, music_mood, caption, hashtags, shots)."""
     return d, res.model
 
 
-# --- Unified AI Orchestrator: routes chat to allowlisted tools; never generates media itself ---
+# --- Project assistants: route chat to allowlisted tools; never generate media themselves ---
+# Two separate assistants, each with its own conversation: "script" (research, context, scripts)
+# and "media" (images and videos, which it can only re-make through a confirmed generation).
 
-ACTIONS = (
-    "answer",
-    "ask",
-    "build_context",
-    "research",
-    "generate_scripts",
-    "revise_script",
-    "propose_generation",
-)
+ACTIONS = {
+    "script": ("answer", "ask", "build_context", "research", "generate_scripts", "revise_script"),
+    "media": ("answer", "ask", "propose_generation"),
+}
+ALL_ACTIONS = tuple(dict.fromkeys(a for acts in ACTIONS.values() for a in acts))
+
+_SCRIPT_SYSTEM = """Bạn là trợ lý KỊCH BẢN của dự án quảng cáo spa trong GrowthPilot. Hiểu yêu cầu và \
+chọn MỘT action:
+- answer: trả lời/tư vấn, không tạo gì.
+- ask: hỏi lại khi yêu cầu mơ hồ hoặc thiếu thông tin bắt buộc.
+- build_context: đọc lại tệp/brief để cập nhật Project Context.
+- research: nghiên cứu thị trường (research_mode quick|standard|deep).
+- generate_scripts: viết kịch bản MỚI (count, instruction). Dùng cả khi người dùng muốn gộp, kết \
+hợp hoặc viết lại từ các kịch bản có sẵn: người viết KHÔNG xem được kịch bản cũ, nên instruction \
+phải chép đủ những gì cần giữ (câu mở đầu, các cảnh, thông điệp, lời kêu gọi).
+- revise_script: sửa kịch bản ĐANG MỞ theo instruction (chỉ khi có kịch bản đang mở).
+Ảnh và video do trợ lý ảnh & video lo; nếu được hỏi, bảo người dùng mở mục Ảnh & Video.
+Khi người dùng nhờ làm việc gì, chọn action đó NGAY; reply nói việc đang được làm và kết quả hiện ở \
+đâu (ví dụ "Đang viết kịch bản gộp, khoảng một phút nữa sẽ có trong danh sách"). Không hứa "sẽ làm" \
+khi action là answer."""
+
+_MEDIA_SYSTEM = """Bạn là trợ lý ẢNH & VIDEO của dự án quảng cáo spa trong GrowthPilot. Hiểu yêu cầu \
+và chọn MỘT action:
+- answer: nhận xét, giải thích, góp ý về ảnh/video; không tạo gì.
+- ask: hỏi lại khi chưa rõ muốn đổi gì.
+- propose_generation: người dùng muốn làm lại hoặc chỉnh ảnh/video. Ghi vào instruction một ghi chú \
+ngắn bằng tiếng Việt mô tả thay đổi (ví dụ "đặt mặt nạ trên mặt, không đặt lên bụng; tông màu ấm \
+hơn"). Hệ thống hiện nút để người dùng xem lại rồi mới tạo; bạn KHÔNG tự tạo. Cần có kịch bản đã \
+chọn; nếu chưa có, dùng ask và bảo người dùng chọn kịch bản ở mục Kịch bản.
+Việc sửa nội dung kịch bản do trợ lý kịch bản lo; nếu được nhờ, bảo người dùng mở mục Kịch bản.
+Mô hình tạo ảnh không viết đúng chữ tiếng Việt có dấu, nên khuyên đưa chữ vào lời kêu gọi khi đăng \
+thay vì vào ảnh."""
 
 
 class OrchestratorOut(BaseModel):
     reply: str
-    action: Literal[ACTIONS] = "answer"  # type: ignore[valid-type]
+    action: Literal[ALL_ACTIONS] = "answer"  # type: ignore[valid-type]
     research_mode: Literal["quick", "standard", "deep"] = "quick"
     count: int = Field(default=3, ge=1, le=5)
     instruction: str = ""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_unused(cls, d):
+        """The model fills fields its action does not use with null/false/0; treat them as unset."""
+        if isinstance(d, dict):
+            d = {k: v for k, v in d.items() if v not in (None, False, 0, "")}
+        return d
+
 
 def orchestrate(
-    db: Session, project: Project, history: list[dict], message: str, selected: dict | None
+    db: Session,
+    project: Project,
+    history: list[dict],
+    message: str,
+    *,
+    scope: Literal["script", "media"] = "script",
+    opened: dict | None = None,
+    library: list[dict] | None = None,
 ) -> OrchestratorOut:
-    system = f"""Bạn là trợ lý dự án quảng cáo spa trong GrowthPilot. Hiểu yêu cầu và chọn MỘT action:
-- answer: trả lời/tư vấn, không tạo deliverable.
-- ask: hỏi lại khi yêu cầu mơ hồ hoặc thiếu thông tin bắt buộc.
-- build_context: đọc lại tệp/brief để cập nhật Project Context.
-- research: nghiên cứu thị trường (research_mode quick|standard|deep).
-- generate_scripts: viết các phương án kịch bản mới (count, instruction).
-- revise_script: sửa kịch bản ĐANG MỞ theo instruction (chỉ khi có kịch bản đang mở).
-- propose_generation: người dùng muốn tạo ảnh/video từ kịch bản đang mở; chỉ đề xuất, hệ thống sẽ \
-hiện nút xác nhận, bạn KHÔNG tự tạo.
+    """`opened` is the artifact on screen (name, kind, content); `library` the project's scripts or
+    media, each a short dict, so requests like "gộp A với B" can refer to them."""
+    system = (
+        (_SCRIPT_SYSTEM if scope == "script" else _MEDIA_SYSTEM)
+        + f"""
 Không bao giờ tự đăng bài hay gửi tin cho khách. {GUARDRAILS}
 Trả JSON: {{"reply","action","research_mode","count","instruction"}}"""
+    )
     parts = [{"text": project_brief(db, project)}]
-    if selected:
-        parts.append(
-            {"text": "KỊCH BẢN ĐANG MỞ:\n" + json.dumps(selected, ensure_ascii=False)[:6000]}
-        )
+    if library:
+        label = "CÁC KỊCH BẢN" if scope == "script" else "KỊCH BẢN ĐÃ CHỌN (nếu có), ẢNH & VIDEO"
+        parts.append({"text": f"{label}:\n" + json.dumps(library, ensure_ascii=False)[:12000]})
+    if opened:
+        parts.append({"text": "ĐANG MỞ:\n" + json.dumps(opened, ensure_ascii=False)[:6000]})
     convo = "\n".join(f"{m['role']}: {m['content']}" for m in history[-10:])
     parts.append({"text": f"LỊCH SỬ:\n{convo}\n\nNGƯỜI DÙNG: {message}"})
     res = gemini_json(
         db,
         system=system,
         parts=parts,
-        purpose="project.chat",
+        purpose=f"project.chat.{scope}",
         workspace_id=project.workspace_id,
         timeout=60,
     )
@@ -423,7 +461,9 @@ Trả JSON: {{"reply","action","research_mode","count","instruction"}}"""
         return OrchestratorOut(
             reply="Mình chưa hiểu rõ yêu cầu, bạn nói cụ thể hơn được không?", action="ask"
         )
-    if out.action == "revise_script" and not selected:
+    if out.action not in ACTIONS[scope]:
+        out.action = "answer"
+    if out.action == "revise_script" and not (opened and opened.get("kind") == "script"):
         out.action = "ask"
     return out
 

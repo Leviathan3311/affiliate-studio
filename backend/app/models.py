@@ -495,6 +495,8 @@ class ChatMessage(IdMixin, Base):
     artifact_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("project_artifacts.id", ondelete="SET NULL")
     )
+    # script = research, context and scripts; media = images and videos. Separate conversations.
+    scope: Mapped[str] = mapped_column(String(16), default="script", server_default="script")
     role: Mapped[str] = mapped_column(String(16))  # user | assistant
     content: Mapped[str] = mapped_column(Text)
     action: Mapped[dict | None] = mapped_column(JSON)  # orchestrator tool call + result refs

@@ -196,13 +196,18 @@ class ReviseIn(BaseModel):
     instruction: str = Field(min_length=1, max_length=2000)
 
 
+ChatScope = Literal["script", "media"]
+
+
 class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     artifact_id: uuid.UUID | None = None
+    scope: ChatScope = "script"
 
 
 class ChatOut(ORM):
     id: uuid.UUID
+    scope: str
     role: str
     content: str
     artifact_id: uuid.UUID | None
@@ -876,14 +881,39 @@ def revise(artifact_id: uuid.UUID, body: ReviseIn, ctx: Marketing, bg: Backgroun
 
 
 @router.get("/projects/{project_id}/chat", response_model=list[ChatOut])
-def chat_history(project_id: uuid.UUID, ctx: AnyMember):
+def chat_history(project_id: uuid.UUID, ctx: AnyMember, scope: ChatScope = "script"):
     p = _project(ctx, project_id)
     return ctx.db.scalars(
         select(ChatMessage)
-        .where(ChatMessage.project_id == p.id)
+        .where(ChatMessage.project_id == p.id, ChatMessage.scope == scope)
         .order_by(ChatMessage.created_at)
         .limit(200)
     ).all()
+
+
+def _chat_view(db, a: Artifact) -> dict:
+    """What the assistant needs to know about one artifact: name, state and its current content."""
+    v = db.get(ArtifactVersion, a.current_version_id) if a.current_version_id else None
+    return {"name": a.display_name, "kind": a.kind, "status": a.status, "content": v and v.content}
+
+
+def _chat_library(db, p: Project, scope: str) -> list[dict]:
+    kinds = ("script",) if scope == "script" else ("image", "video", "short")
+    arts = db.scalars(
+        select(Artifact)
+        .where(Artifact.project_id == p.id, Artifact.kind.in_(kinds), Artifact.status != "archived")
+        .order_by(Artifact.created_at)
+    )
+    if scope == "script":
+        return [_chat_view(db, a) for a in arts]
+    # Media content is file metadata, so name and state only, plus the script it is made from.
+    chosen = db.scalar(
+        select(Artifact).where(
+            Artifact.project_id == p.id, Artifact.kind == "script", Artifact.status == "selected"
+        )
+    )
+    media = [{"name": a.display_name, "kind": a.kind, "status": a.status} for a in arts]
+    return ([_chat_view(db, chosen)] if chosen else []) + media
 
 
 @router.post("/projects/{project_id}/chat", response_model=list[ChatOut])
@@ -891,15 +921,12 @@ def chat(project_id: uuid.UUID, body: ChatIn, ctx: Marketing, bg: BackgroundTask
     _gemini_ready()
     p = _project(ctx, project_id)
     db = ctx.db
-    selected = None
     art = _artifact(ctx, body.artifact_id) if body.artifact_id else None
-    if art and art.kind == "script" and art.current_version_id:
-        selected = db.get(ArtifactVersion, art.current_version_id).content
     history = [
         {"role": m.role, "content": m.content}
         for m in db.scalars(
             select(ChatMessage)
-            .where(ChatMessage.project_id == p.id)
+            .where(ChatMessage.project_id == p.id, ChatMessage.scope == body.scope)
             .order_by(ChatMessage.created_at.desc())
             .limit(10)
         )
@@ -908,13 +935,22 @@ def chat(project_id: uuid.UUID, body: ChatIn, ctx: Marketing, bg: BackgroundTask
         workspace_id=ctx.ws_id,
         project_id=p.id,
         artifact_id=art.id if art else None,
+        scope=body.scope,
         role="user",
         content=body.message,
         user_id=ctx.user.id,
     )
     db.add(user_msg)
     try:
-        out = agents.orchestrate(db, p, history, body.message, selected)
+        out = agents.orchestrate(
+            db,
+            p,
+            history,
+            body.message,
+            scope=body.scope,
+            opened=_chat_view(db, art) if art else None,
+            library=_chat_library(db, p, body.scope),
+        )
     except LLMUnavailable:
         db.commit()
         raise HTTPException(
@@ -933,12 +969,22 @@ def chat(project_id: uuid.UUID, body: ChatIn, ctx: Marketing, bg: BackgroundTask
         action["artifact_ids"] = [str(art.id)]
     elif out.action == "build_context":
         bg.add_task(_in_background, task_context, p.id)
-    elif out.action == "propose_generation" and art:
-        action["script_artifact_id"] = str(art.id)  # UI shows a confirm button; nothing runs yet
+    elif out.action == "propose_generation":
+        chosen = db.scalar(
+            select(Artifact).where(
+                Artifact.project_id == p.id,
+                Artifact.kind == "script",
+                Artifact.status == "selected",
+            )
+        )
+        if chosen:  # UI shows a confirm button with the note filled in; nothing runs yet
+            action["script_artifact_id"] = str(chosen.id)
+            action["note"] = out.instruction
     reply = ChatMessage(
         workspace_id=ctx.ws_id,
         project_id=p.id,
         artifact_id=art.id if art else None,
+        scope=body.scope,
         role="assistant",
         content=out.reply,
         action=action,
@@ -959,7 +1005,7 @@ def generate(project_id: uuid.UUID, body: GenerateIn, ctx: Marketing):
     if art.project_id != p.id or art.kind != "script" or art.status != "selected":
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Hãy chọn một kịch bản (Dùng kịch bản này) trước khi tạo ảnh/video",
+            "Hãy chọn một kịch bản (Chọn bản này) trước khi tạo ảnh/video",
         )
     version = ctx.db.get(ArtifactVersion, art.current_version_id)
     job = media.create_studio_job(

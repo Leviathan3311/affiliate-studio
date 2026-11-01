@@ -409,3 +409,55 @@ def test_project_style_override_and_new_versions(client, spa, gemini):
         ).status_code
         == 403
     )
+
+
+def test_script_and_media_assistants_keep_separate_conversations(client, spa, gemini, monkeypatch):
+    h, p = spa
+    base = f"/api/v1/projects/{p['id']}"
+    _, b, _ = client.post(f"{base}/scripts", headers=h, json={"count": 3}).json()
+    seen = {}
+    fake_scripts = agents.gemini_json
+
+    def fake(db, *, system, parts, purpose, workspace_id, **kw):
+        if not purpose.startswith("project.chat"):
+            return fake_scripts(
+                db, system=system, parts=parts, purpose=purpose, workspace_id=workspace_id, **kw
+            )
+        seen[purpose] = "\n".join(x["text"] for x in parts)
+        if purpose == "project.chat.script":
+            return GeminiResult(
+                {
+                    "reply": "Đang viết",
+                    "action": "generate_scripts",
+                    "count": 1,
+                    "instruction": "gộp",
+                },
+                "gemini-test",
+                [],
+            )
+        # the media assistant may not write scripts; only propose a confirmed re-generation
+        return GeminiResult(
+            {"reply": "Làm lại nhé", "action": "propose_generation", "instruction": "tông ấm"},
+            "gemini-test",
+            [],
+        )
+
+    monkeypatch.setattr(agents, "gemini_json", fake)
+    out = client.post(f"{base}/chat", headers=h, json={"message": "gộp A với B"}).json()
+    assert out[1]["action"]["type"] == "generate_scripts"
+    assert "Kịch bản A — Thư giãn sau giờ làm" in seen["project.chat.script"]  # sees the list
+
+    client.post(f"/api/v1/artifacts/{b['id']}/select", headers=h)
+    out = client.post(
+        f"{base}/chat", headers=h, json={"message": "ảnh ấm hơn", "scope": "media"}
+    ).json()
+    assert out[1]["action"] == {
+        "type": "propose_generation",
+        "script_artifact_id": b["id"],
+        "note": "tông ấm",
+    }
+
+    script_chat = client.get(f"{base}/chat", headers=h).json()
+    media_chat = client.get(f"{base}/chat?scope=media", headers=h).json()
+    assert [m["content"] for m in script_chat] == ["gộp A với B", "Đang viết"]
+    assert [m["content"] for m in media_chat] == ["ảnh ấm hơn", "Làm lại nhé"]

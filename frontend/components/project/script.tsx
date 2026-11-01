@@ -51,7 +51,7 @@ export function ScriptView({
         </p>
       ))}
       <dl className="grid gap-4 sm:grid-cols-2">
-        {([["Góc tiếp cận", s.angle], ["Insight", s.insight], ["Câu mở đầu (3 giây đầu)", s.hook], ["Thông điệp chính", s.key_message], ["CTA", s.cta], ["Thời lượng", `${s.duration_seconds} giây · 9:16`]] as const).map(([k, v]) => (
+        {([["Góc tiếp cận", s.angle], ["Điều khách quan tâm", s.insight], ["Câu mở đầu (3 giây đầu)", s.hook], ["Thông điệp chính", s.key_message], ["Lời kêu gọi", s.cta], ["Thời lượng", `${s.duration_seconds} giây · 9:16`]] as const).map(([k, v]) => (
           <div key={k}>
             <dt className="text-xs text-faint">{k}</dt>
             <dd className="mt-1 text-[15px] leading-relaxed">{v || "—"}</dd>
@@ -92,7 +92,7 @@ export function ScriptView({
       {error && <div className="mt-4"><ErrorNote error={error} /></div>}
       <div className="mt-6 flex flex-wrap gap-2">
         {a.status !== "selected" ? (
-          <Button variant="primary" busy={busy === "select"} onClick={() => act("select", `/artifacts/${a.id}/select`)}>Dùng kịch bản này</Button>
+          <Button variant="primary" busy={busy === "select"} onClick={() => act("select", `/artifacts/${a.id}/select`)}>Chọn bản này</Button>
         ) : (
           <Button variant="primary" onClick={onGenerate}>Tạo ảnh & video</Button>
         )}
@@ -103,8 +103,9 @@ export function ScriptView({
           if (name) act("rename", `/artifacts/${a.id}`, { display_name: name }, "PATCH");
         }}>Đổi tên</Button>
         <Button variant="ghost" busy={busy === "archive"} onClick={() => act("archive", `/artifacts/${a.id}`, { archived: true }, "PATCH")}>Lưu trữ</Button>
+        <Button variant="danger" busy={busy === "delete"} onClick={() => confirm(`Xoá “${a.display_name}”? Không thể khôi phục.`) && act("delete", `/artifacts/${a.id}`, undefined, "DELETE")}>Xoá</Button>
       </div>
-      <p className="mt-3 text-xs text-faint">Muốn sửa? Nhắn trợ lý AI ở khung bên dưới; bản cũ vẫn được giữ.</p>
+      <p className="mt-3 text-xs text-faint">Muốn sửa? Nhắn trợ lý kịch bản; bản cũ vẫn được giữ.</p>
       <span className="sr-only">{project.name}</span>
     </Panel>
   );
@@ -114,9 +115,9 @@ export function ScriptView({
 export function CompareView({ items, onClose }: { items: Artifact[]; onClose: () => void }) {
   const rows: [string, (s: Script) => string][] = [
     ["Góc tiếp cận", (s) => s.angle],
-    ["Hook", (s) => s.hook],
+    ["Câu mở đầu", (s) => s.hook],
     ["Thông điệp", (s) => s.key_message],
-    ["CTA", (s) => s.cta],
+    ["Lời kêu gọi", (s) => s.cta],
     ["Thời lượng", (s) => `${s.duration_seconds} giây · ${s.shots.length} cảnh`],
     ["Cần lưu ý", (s) => (s.flags?.length ? s.flags.map((f) => FLAG[f] ?? f).join("; ") : "—")],
   ];
@@ -145,9 +146,11 @@ export function CompareView({ items, onClose }: { items: Artifact[]; onClose: ()
 }
 
 /** Confirmation before generating: what will be made, how long it takes, the style, one optional note. */
-export function GenerateDialog({ project, script, onClose, onQueued }: { project: Project; script: Artifact; onClose: () => void; onQueued: () => void }) {
+export function GenerateDialog({ project, script, note = "", onClose, onQueued }: {
+  project: Project; script: Artifact; note?: string; onClose: () => void; onQueued: () => void;
+}) {
   const [style, setStyle] = useState<Record<string, EffectiveStyle> | null>(null);
-  const [extra, setExtra] = useState("");
+  const [extra, setExtra] = useState(note);
   const [off, setOff] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);

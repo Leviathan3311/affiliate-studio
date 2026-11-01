@@ -379,7 +379,7 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   artifact_id: string | null;
-  action: { type: string; artifact_ids?: string[]; script_artifact_id?: string } | null;
+  action: { type: string; artifact_ids?: string[]; script_artifact_id?: string; note?: string } | null;
   created_at: string;
 }
 
