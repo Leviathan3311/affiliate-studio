@@ -7,29 +7,30 @@
 # Settings: Accelerator **GPU T4 x2**, Internet **On**, Secrets: `GP_API_URL`, `MEDIA_WORKER_TOKEN`,
 # `HF_TOKEN`.
 #
-# VRAM plan (Phương án A): one ComfyUI server per GPU so nothing is reloaded between jobs.
-# `cuda:0` → FLUX.2 klein + ACE-Step 1.5; `cuda:1` → MiniMax H3 fl2va (I2VA) Q4_K + Turbo LoRA 8-step.
-# MiniMax H3 also needs its Qwen3-VL-32B text encoder (GGUF Q4_K_M 18.2 GB): it does not fit on a
-# 16 GB T4 next to the 11.4 GB transformer, so ComfyUI encodes the prompt first and offloads it to the
-# 29 GB system RAM. Total downloads are ~59 GB of the session's temporary disk.
+# VRAM plan (Phương án A): `cuda:0` → ComfyUI with FLUX.2 klein + ACE-Step 1.5;
+# `cuda:1` → MiniMax H3 fl2va (I2VA) Q4_K + Turbo LoRA 8-step via stable-diffusion.cpp (`sd-cli`):
+# the unsloth H3 GGUFs are sd.cpp files that ComfyUI-GGUF cannot load. Its Qwen3-VL-32B text encoder
+# (Q4_K_M 17 GB) runs on the CPU and weights are memory-mapped, as the model card recommends.
+# sd-cli is compiled for the T4 (sm_75) while the models download. Downloads are ~59 GB.
 #
 # Licences (checked on Hugging Face, Nov 2026): FLUX.2 klein **4B = Apache-2.0** (commercial OK);
 # klein **9B = FLUX Non-Commercial** (needs a BFL commercial licence for a paid SaaS). MiniMax H3 =
 # community licence: commercial OK under USD 20M/yr revenue, and the product UI must display
 # "MiniMax H3". ACE-Step 1.5 = MIT / Apache-2.0.
 #
-# The model graphs live in ComfyUI workflow files (API format) under `workflows/`, built from the
-# official ComfyUI templates (FLUX.2 klein 9B distilled edit, MiniMax H3 I2V turbo, ACE-Step 1.5 split)
-# with GGUF loaders, so swapping a model or quantization never needs a code change.
+# FLUX.2 and ACE-Step graphs live in ComfyUI workflow files (API format) under `workflows/`, built
+# from the official ComfyUI templates with GGUF loaders, so swapping a model never needs a code change.
 
 # %%
 import json
 import os
 import random
+import shutil
 import subprocess
 import sys
 import time
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -43,7 +44,10 @@ from gp_worker import Worker, ffmpeg, probe_duration, secret, video_codec  # noq
 DRY_RUN = os.environ.get("GP_DRY_RUN", "0") == "1"
 WORKFLOWS = HERE / "workflows" if (HERE / "workflows").is_dir() else HERE  # the dataset is flat
 COMFY = Path("/kaggle/working/ComfyUI")
-GPU_SERVERS = {"image": "http://127.0.0.1:8188", "audio": "http://127.0.0.1:8188", "video": "http://127.0.0.1:8189"}
+GPU_SERVERS = {"image": "http://127.0.0.1:8188", "audio": "http://127.0.0.1:8188"}
+SDCPP = Path("/kaggle/working/stable-diffusion.cpp")
+SDCPP_TAG = "master-1031-c6dfa9d"  # first release with MiniMax-H3 I2VA docs; bump deliberately
+SD_CLI = SDCPP / "build/bin/sd-cli"
 
 # Owner's decision (Nov 2026): non-commercial internal use, so the higher-quality 9B is the default.
 # FLUX.2 klein 9B is FLUX Non-Commercial; set GP_FLUX_VARIANT=4b (Apache-2.0) before selling the service.
@@ -62,16 +66,20 @@ FLUX = {
 FILE_SWAP = {"4b": {"flux-2-klein-9b-Q8_0.gguf": "flux-2-klein-4b-Q8_0.gguf",
                     "qwen_3_8b_fp8mixed.safetensors": "qwen_3_4b.safetensors"}}.get(FLUX_VARIANT, {})
 
+H3_MODEL = "minimax_h3_fl2va_pruned-Q4_K.gguf"
+H3_TE = "qwen3vl_32b_minimax_h3-Q4_K_M.gguf"
+H3_LORA = "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+
 # (hf repo, file in repo, ComfyUI models subfolder). Keep in sync with the loaders in workflows/*.json.
 MODELS = [
     *FLUX,
     ("Comfy-Org/Flux-2-Klein-4B", "split_files/vae/flux2-vae.safetensors", "vae"),
     # MiniMax H3 fl2va = first/last-frame image-to-video+audio (the design's I2VA mode)
-    ("unsloth/MiniMax-H3-GGUF", "minimax_h3_fl2va_pruned-Q4_K.gguf", "diffusion_models"),  # 11.4 GB
-    ("unsloth/MiniMax-H3-GGUF", "qwen3vl_32b_minimax_h3-Q4_K_M.gguf", "text_encoders"),  # 18.2 GB
+    ("unsloth/MiniMax-H3-GGUF", H3_MODEL, "diffusion_models"),  # 10.6 GiB
+    ("unsloth/MiniMax-H3-GGUF", H3_TE, "text_encoders"),  # 17 GiB
     ("unsloth/MiniMax-H3-GGUF", "vae/minimax_h3_video_vae_fp16.safetensors", "vae"),
     ("unsloth/MiniMax-H3-GGUF", "vae/minimax_h3_audio_vae_fp32.safetensors", "vae"),
-    ("Comfy-Org/MiniMax-H3", "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", "loras"),
+    ("Comfy-Org/MiniMax-H3", H3_LORA, "loras"),
     # ACE-Step 1.5 turbo, split files (~3.5 GB VRAM incl. the small text encoder)
     ("Comfy-Org/ACE-Step-1.5", "split_files/diffusion_models/acestep_v1.5_turbo.safetensors", "diffusion_models"),
     ("Comfy-Org/ACE-Step-1.5", "split_files/text_encoders/qwen_0.6b_ace15.safetensors", "text_encoders"),
@@ -83,7 +91,24 @@ MODELS = [
 # ## Setup: ComfyUI + GGUF loader, model download, one server per GPU
 
 # %%
+def build_sdcpp() -> None:
+    """Compile sd-cli with CUDA for the T4 only (sm_75, no CUTLASS) to keep the build short."""
+    if SD_CLI.exists():
+        return
+    log = open("/kaggle/working/sdcpp_build.log", "w")
+    run = lambda *cmd: subprocess.run(cmd, check=True, stdout=log, stderr=subprocess.STDOUT)
+    if not shutil.which("cmake"):
+        run(sys.executable, "-m", "pip", "install", "-q", "cmake")
+    run("git", "clone", "--depth", "1", "--branch", SDCPP_TAG, "--recursive", "--shallow-submodules",
+        "https://github.com/leejet/stable-diffusion.cpp", str(SDCPP))
+    run("cmake", "-S", str(SDCPP), "-B", str(SDCPP / "build"), "-DCMAKE_BUILD_TYPE=Release", "-DSD_CUDA=ON",
+        "-DCMAKE_CUDA_ARCHITECTURES=75", "-DGGML_CUDA_CUTLASS_PATH:PATH=",
+        f"-DCMAKE_CUDA_COMPILER={shutil.which('nvcc') or '/usr/local/cuda/bin/nvcc'}")
+    run("cmake", "--build", str(SDCPP / "build"), "--config", "Release", "-j", str(os.cpu_count()), "--target", "sd-cli")
+
+
 def setup() -> None:
+    builder = ThreadPoolExecutor(1).submit(build_sdcpp)  # overlaps with the model downloads
     if not COMFY.exists():
         subprocess.run(["git", "clone", "--depth", "1", "https://github.com/comfyanonymous/ComfyUI", str(COMFY)], check=True)
         subprocess.run(["git", "clone", "--depth", "1", "https://github.com/city96/ComfyUI-GGUF",
@@ -99,20 +124,18 @@ def setup() -> None:
             path = hf_hub_download(repo, filename, token=secret("HF_TOKEN"), cache_dir="/kaggle/tmp/hf")
             target.parent.mkdir(parents=True, exist_ok=True)
             os.symlink(path, target)
-    for gpu, port in (("0", 8188), ("1", 8189)):
-        env = {**os.environ, "CUDA_VISIBLE_DEVICES": gpu}
-        subprocess.Popen([sys.executable, "main.py", "--listen", "127.0.0.1", "--port", str(port),
-                          "--disable-auto-launch"], cwd=COMFY, env=env,
-                         stdout=open(f"/kaggle/working/comfy{gpu}.log", "w"), stderr=subprocess.STDOUT)
-    for url in {GPU_SERVERS["image"], GPU_SERVERS["video"]}:
-        for _ in range(180):
-            try:
-                if requests.get(f"{url}/system_stats", timeout=2).ok:
-                    break
-            except requests.RequestException:
-                time.sleep(2)
-        else:
-            raise RuntimeError(f"ComfyUI at {url} did not start; see /kaggle/working/comfy*.log")
+    subprocess.Popen([sys.executable, "main.py", "--listen", "127.0.0.1", "--port", "8188", "--disable-auto-launch"],
+                     cwd=COMFY, env={**os.environ, "CUDA_VISIBLE_DEVICES": "0"},
+                     stdout=open("/kaggle/working/comfy0.log", "w"), stderr=subprocess.STDOUT)
+    for _ in range(180):
+        try:
+            if requests.get(f"{GPU_SERVERS['image']}/system_stats", timeout=2).ok:
+                break
+        except requests.RequestException:
+            time.sleep(2)
+    else:
+        raise RuntimeError("ComfyUI did not start; see /kaggle/working/comfy0.log")
+    builder.result()  # raises if the sd.cpp build failed; see /kaggle/working/sdcpp_build.log
 
 
 # %% [markdown]
@@ -212,6 +235,24 @@ def stage_images(w: Worker, job: dict, d: Path) -> tuple[Path, Path]:
     return master, thumb
 
 
+def h3_clip(prompt: str, image: Path, frames: int, seed: int, out: Path) -> None:
+    """MiniMax H3 I2VA with sd-cli (flags from sd.cpp docs/minimax_h3.md and the unsloth model card)."""
+    m, avi = COMFY / "models", out.with_suffix(".avi")
+    lora = Path(H3_LORA).stem
+    cmd = [str(SD_CLI), "-M", "vid_gen",
+           "--diffusion-model", str(m / "diffusion_models" / H3_MODEL), "--llm", str(m / "text_encoders" / H3_TE),
+           "--vae", str(m / "vae/minimax_h3_video_vae_fp16.safetensors"),
+           "--audio-vae", str(m / "vae/minimax_h3_audio_vae_fp32.safetensors"),
+           "--lora-model-dir", str(m / "loras"), "-p", f"{prompt}<lora:{lora}:1>", "-i", str(image),
+           "-W", str(VIDEO_W), "-H", str(VIDEO_H), "--video-frames", str(frames), "--fps", "24",
+           "--steps", "8", "--cfg-scale", "1.0", "-s", str(seed), "--rng", "cpu",
+           "--backend", "te=cpu", "--offload-to-cpu", "--mmap", "--diffusion-fa", "--vae-tiling", "-o", str(avi)]
+    res = subprocess.run(cmd, env={**os.environ, "CUDA_VISIBLE_DEVICES": "1"}, capture_output=True, text=True)
+    if res.returncode or not avi.exists():
+        raise RuntimeError(f"sd-cli MiniMax H3 failed ({res.returncode}): {(res.stdout + res.stderr)[-1500:]}")
+    ffmpeg("-i", str(avi), *video_codec(), "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "32000", str(out))
+
+
 def stage_clips(w: Worker, job: dict, d: Path, master: Path) -> list[Path]:
     clips = []
     shots = job["payload"]["shots"]
@@ -226,9 +267,7 @@ def stage_clips(w: Worker, job: dict, d: Path, master: Path) -> list[Path]:
         else:
             # H3 has no negative-prompt input; the template writes constraints into the prompt instead.
             prompt = f"{shot['prompt']}\n\nAvoid: {shot['negative_prompt']}" if shot.get("negative_prompt") else shot["prompt"]
-            comfy_run("minimax_h3_i2va", "video", {"prompt": prompt, "image": master, "length": h3_frames(secs),
-                                                   "width": VIDEO_W, "height": VIDEO_H,
-                                                   "seed": random.randint(0, 2**31 - 1)}, out)
+            h3_clip(prompt, master, h3_frames(secs), random.randint(0, 2**31 - 1), out)
         clips.append(out)
     return clips
 
