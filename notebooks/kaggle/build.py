@@ -3,7 +3,7 @@
     KAGGLE_USERNAME=you python notebooks/kaggle/build.py
 
 Creates notebooks/kaggle/dist/
-  dataset/   gp_worker.py + workflows/  -> `kaggle datasets create -p dist/dataset`
+  dataset/   gp_worker.py + workflows/*.json (flat) -> `kaggle datasets create -p dist/dataset`
   nb1/, nb2/ notebook + kernel-metadata  -> `kaggle kernels push -p dist/nb1`
 """
 
@@ -43,7 +43,8 @@ def main() -> None:
     ds = DIST / "dataset"
     ds.mkdir(parents=True)
     shutil.copy(HERE / "gp_worker.py", ds)
-    shutil.copytree(HERE / "workflows", ds / "workflows")
+    for f in (HERE / "workflows").glob("*.json"):  # flat: `kaggle datasets` skips subfolders
+        shutil.copy(f, ds)
     (ds / "dataset-metadata.json").write_text(json.dumps(
         {"title": "growthpilot-worker", "id": DATASET, "licenses": [{"name": "other"}]}, indent=2))
     for name, (src, title) in KERNELS.items():

@@ -34,12 +34,14 @@ from pathlib import Path
 
 import requests
 
-sys.path.insert(0, "/kaggle/input/growthpilot-worker")  # utility-script dataset; build.py inlines it
+# Kaggle mounts the dataset at /kaggle/input/<slug> or /kaggle/input/datasets/<owner>/<slug>.
+HERE = Path(os.environ.get("GP_NOTEBOOK_DIR") or next(Path("/kaggle/input").rglob("gp_worker.py")).parent)
+sys.path.insert(0, str(HERE))
 from gp_worker import Worker, ffmpeg, probe_duration, secret, video_codec  # noqa: E402
 
 # DRY_RUN=1 renders placeholder media with FFmpeg only: tests the full API/R2 loop without GPUs.
 DRY_RUN = os.environ.get("GP_DRY_RUN", "0") == "1"
-HERE = Path(os.environ.get("GP_NOTEBOOK_DIR", "/kaggle/input/growthpilot-worker"))
+WORKFLOWS = HERE / "workflows" if (HERE / "workflows").is_dir() else HERE  # the dataset is flat
 COMFY = Path("/kaggle/working/ComfyUI")
 GPU_SERVERS = {"image": "http://127.0.0.1:8188", "audio": "http://127.0.0.1:8188", "video": "http://127.0.0.1:8189"}
 
@@ -122,8 +124,8 @@ def setup() -> None:
 
 # %%
 def load_workflow(name: str) -> tuple[dict, dict]:
-    wf = HERE / "workflows" / f"{name}.json"
-    mp = HERE / "workflows" / f"{name}.map.json"
+    wf = WORKFLOWS / f"{name}.json"
+    mp = WORKFLOWS / f"{name}.map.json"
     if not wf.exists() or not mp.exists():
         raise FileNotFoundError(f"Missing ComfyUI workflow {wf} / {mp}. See workflows/README.md")
     return json.loads(wf.read_text()), json.loads(mp.read_text())

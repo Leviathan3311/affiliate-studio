@@ -17,7 +17,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "/kaggle/input/growthpilot-worker")
+# Kaggle mounts the dataset at /kaggle/input/<slug> or /kaggle/input/datasets/<owner>/<slug>.
+HERE = Path(os.environ.get("GP_NOTEBOOK_DIR") or next(Path("/kaggle/input").rglob("gp_worker.py")).parent)
+sys.path.insert(0, str(HERE))
 from gp_worker import Worker, ffmpeg, probe_duration, secret, video_codec  # noqa: E402
 
 DRY_RUN = os.environ.get("GP_DRY_RUN", "0") == "1"
