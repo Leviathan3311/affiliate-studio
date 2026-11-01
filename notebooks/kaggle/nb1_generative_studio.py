@@ -108,12 +108,20 @@ def build_sdcpp() -> None:
         run(sys.executable, "-m", "pip", "install", "-q", "cmake<4")
     cudas = sorted(Path("/usr/local").glob("cuda*/bin/nvcc"))
     nvcc = shutil.which("nvcc") or (str(cudas[-1]) if cudas else "/usr/local/cuda/bin/nvcc")
+    # Kaggle's driver library sits outside FindCUDAToolkit's search paths (CUDA::cuda_driver not
+    # found): link against the toolkit's stub, or the real libcuda, explicitly.
+    cuda_root = Path(nvcc).resolve().parent.parent
+    libcuda = next((str(f) for pattern in ("lib64/stubs/libcuda.so", "targets/*/lib/stubs/libcuda.so") for f in cuda_root.glob(pattern)), None) \
+        or next((str(f) for d in ("/usr/lib/x86_64-linux-gnu", "/usr/local/nvidia/lib64", "/usr/lib64-nvidia", "/usr/lib64")
+                 for f in sorted(Path(d).glob("libcuda.so*")) if f.is_file()), None)
+    if not libcuda:
+        raise RuntimeError("libcuda.so not found (no CUDA stub and no driver library); cannot build sd-cli")
     if not (SDCPP / ".git").exists():  # a re-run after a failed build reuses the checkout
         run("git", "clone", "--depth", "1", "--branch", SDCPP_TAG, "--recursive", "--shallow-submodules",
             "https://github.com/leejet/stable-diffusion.cpp", str(SDCPP))
     run("cmake", "-S", str(SDCPP), "-B", str(SDCPP / "build"), "-DCMAKE_BUILD_TYPE=Release", "-DSD_CUDA=ON",
         "-DCMAKE_CUDA_ARCHITECTURES=75", "-DGGML_CUDA_CUTLASS_PATH:PATH=",
-        f"-DCMAKE_CUDA_COMPILER={nvcc}")
+        f"-DCMAKE_CUDA_COMPILER={nvcc}", f"-DCUDA_cuda_driver_LIBRARY={libcuda}")
     run("cmake", "--build", str(SDCPP / "build"), "--config", "Release", "-j", str(os.cpu_count()), "--target", "sd-cli")
 
 
