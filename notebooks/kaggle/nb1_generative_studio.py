@@ -11,15 +11,16 @@
 # `cuda:0` → FLUX.2 klein + ACE-Step 1.5; `cuda:1` → MiniMax H3 fl2va (I2VA) Q4_K + Turbo LoRA 8-step.
 # MiniMax H3 also needs its Qwen3-VL-32B text encoder (GGUF Q4_K_M 18.2 GB): it does not fit on a
 # 16 GB T4 next to the 11.4 GB transformer, so ComfyUI encodes the prompt first and offloads it to the
-# 29 GB system RAM. Total downloads are ~56 GB of the session's temporary disk.
+# 29 GB system RAM. Total downloads are ~59 GB of the session's temporary disk.
 #
 # Licences (checked on Hugging Face, Nov 2026): FLUX.2 klein **4B = Apache-2.0** (commercial OK);
 # klein **9B = FLUX Non-Commercial** (needs a BFL commercial licence for a paid SaaS). MiniMax H3 =
 # community licence: commercial OK under USD 20M/yr revenue, and the product UI must display
 # "MiniMax H3". ACE-Step 1.5 = MIT / Apache-2.0.
 #
-# The model graphs live in ComfyUI workflow files (API format) under `workflows/`, so swapping a
-# model or quantization never needs a code change.
+# The model graphs live in ComfyUI workflow files (API format) under `workflows/`, built from the
+# official ComfyUI templates (FLUX.2 klein 9B distilled edit, MiniMax H3 I2V turbo, ACE-Step 1.5 split)
+# with GGUF loaders, so swapping a model or quantization never needs a code change.
 
 # %%
 import json
@@ -55,6 +56,9 @@ FLUX = {
         ("Comfy-Org/Flux-2-Klein-9B", "split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors", "text_encoders"),
     ],
 }[FLUX_VARIANT]
+# workflows/*.json name the 9B files; the 4B variant swaps them in at run time.
+FILE_SWAP = {"4b": {"flux-2-klein-9b-Q8_0.gguf": "flux-2-klein-4b-Q8_0.gguf",
+                    "qwen_3_8b_fp8mixed.safetensors": "qwen_3_4b.safetensors"}}.get(FLUX_VARIANT, {})
 
 # (hf repo, file in repo, ComfyUI models subfolder). Keep in sync with the loaders in workflows/*.json.
 MODELS = [
@@ -69,6 +73,7 @@ MODELS = [
     # ACE-Step 1.5 turbo, split files (~3.5 GB VRAM incl. the small text encoder)
     ("Comfy-Org/ACE-Step-1.5", "split_files/diffusion_models/acestep_v1.5_turbo.safetensors", "diffusion_models"),
     ("Comfy-Org/ACE-Step-1.5", "split_files/text_encoders/qwen_0.6b_ace15.safetensors", "text_encoders"),
+    ("Comfy-Org/ACE-Step-1.5", "split_files/text_encoders/qwen_1.7b_ace15.safetensors", "text_encoders"),
     ("Comfy-Org/ACE-Step-1.5", "split_files/vae/ace_1.5_vae.safetensors", "vae"),
 ]
 
@@ -112,9 +117,8 @@ def setup() -> None:
 # ## ComfyUI client
 # Each workflow `workflows/<name>.json` (exported with *Save (API Format)*) has a sibling
 # `<name>.map.json` saying where to inject values, e.g.
-# `{"prompt": [["6", "text"]], "negative": [["7", "text"]], "seed": [["3", "seed"]],
-#   "image": [["12", "image"]], "width": [["5", "width"]], "height": [["5", "height"]],
-#   "seconds": [["20", "length"]]}`
+# `{"prompt": [["7", "text"]], "seed": [["12", "noise_seed"]], "image": [["4", "image"]],
+#   "width": [["14", "width"], ["15", "width"]], "height": [["14", "height"], ["15", "height"]]}`
 
 # %%
 def load_workflow(name: str) -> tuple[dict, dict]:
@@ -135,6 +139,10 @@ def comfy_upload(server: str, path: Path) -> str:
 def comfy_run(name: str, modality: str, values: dict, out: Path, timeout: int = 1800) -> Path:
     server = GPU_SERVERS[modality]
     graph, mapping = load_workflow(name)
+    for node in graph.values():
+        for key, value in node["inputs"].items():
+            if isinstance(value, str) and value in FILE_SWAP:
+                node["inputs"][key] = FILE_SWAP[value]
     for field, value in values.items():
         if value is None:
             continue
@@ -169,6 +177,20 @@ def comfy_run(name: str, modality: str, values: dict, out: Path, timeout: int = 
 
 # %%
 W, H = 1080, 1920
+GEN_W = 1088  # FLUX.2 latents need multiples of 16; cropped back to W
+VIDEO_W, VIDEO_H = 480, 864  # MiniMax H3 on a T4 (multiples of 32); stage_mix scales to W x H
+
+
+def h3_frames(seconds: float) -> int:
+    """MiniMax H3 frame count at 24 fps, snapped up to its 17k+5 grid (as in the ComfyUI template)."""
+    n = max(5, round(seconds * 24))
+    return n + (5 - n % 17) % 17
+
+
+def flux_image(wf: str, prompt: str, ref: Path | None, seed: int, out: Path) -> None:
+    raw = out.with_suffix(".raw.png")
+    comfy_run(wf, "image", {"prompt": prompt, "image": ref, "seed": seed, "width": GEN_W, "height": H}, raw)
+    ffmpeg("-i", str(raw), "-vf", f"crop={W}:{H}", str(out))
 
 
 def stage_images(w: Worker, job: dict, d: Path) -> tuple[Path, Path]:
@@ -182,11 +204,9 @@ def stage_images(w: Worker, job: dict, d: Path) -> tuple[Path, Path]:
         return master, thumb
     wf = "flux2_klein_ref" if ref else "flux2_klein_t2i"
     seed = random.randint(0, 2**31 - 1)
-    comfy_run(wf, "image", {"prompt": p["studio_master"]["prompt"], "image": ref, "seed": seed,
-                            "width": W, "height": H}, master)
+    flux_image(wf, p["studio_master"]["prompt"], ref, seed, master)
     w.progress("flux2:thumbnail", 0.2)
-    comfy_run(wf, "image", {"prompt": p["thumbnail"]["prompt"], "image": ref, "seed": seed + 1,
-                            "width": W, "height": H}, thumb)
+    flux_image(wf, p["thumbnail"]["prompt"], ref, seed + 1, thumb)
     return master, thumb
 
 
@@ -202,8 +222,10 @@ def stage_clips(w: Worker, job: dict, d: Path, master: Path) -> list[Path]:
                    "-t", str(secs), "-vf", f"scale={W}:{H},fps=24", *video_codec(), "-pix_fmt", "yuv420p",
                    "-c:a", "aac", "-ar", "32000", "-shortest", str(out))
         else:
-            comfy_run("minimax_h3_i2va", "video", {"prompt": shot["prompt"], "negative": shot["negative_prompt"],
-                                                   "image": master, "seconds": secs,
+            # H3 has no negative-prompt input; the template writes constraints into the prompt instead.
+            prompt = f"{shot['prompt']}\n\nAvoid: {shot['negative_prompt']}" if shot.get("negative_prompt") else shot["prompt"]
+            comfy_run("minimax_h3_i2va", "video", {"prompt": prompt, "image": master, "length": h3_frames(secs),
+                                                   "width": VIDEO_W, "height": VIDEO_H,
                                                    "seed": random.randint(0, 2**31 - 1)}, out)
         clips.append(out)
     return clips
@@ -216,8 +238,9 @@ def stage_bgm(w: Worker, job: dict, d: Path) -> Path:
     if DRY_RUN:
         ffmpeg("-f", "lavfi", "-i", f"sine=frequency=220:duration={secs}", "-ar", "32000", str(bgm))
     else:
-        comfy_run("ace_step_bgm", "audio", {"prompt": job["payload"]["bgm"]["prompt"], "seconds": secs,
-                                             "seed": random.randint(0, 2**31 - 1)}, bgm)
+        flac = comfy_run("ace_step_bgm", "audio", {"prompt": job["payload"]["bgm"]["prompt"], "seconds": secs,
+                                                    "seed": random.randint(0, 2**31 - 1)}, d / "bgm.flac")
+        ffmpeg("-i", str(flac), "-ar", "32000", str(bgm))
     return bgm
 
 
