@@ -180,8 +180,10 @@ def gemini_json(
         }
         if search:
             body["tools"] = [{"google_search": {}}]
+        # success set explicitly: the column default only applies at INSERT, and the span below
+        # reads it before then (a None here marked every successful call as ERROR in Langfuse).
         rec = AIUsageRecord(
-            workspace_id=workspace_id, purpose=purpose, provider="gemini", model=model
+            workspace_id=workspace_id, purpose=purpose, provider="gemini", model=model, success=True
         )
         started = time.monotonic()
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
