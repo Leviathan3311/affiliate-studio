@@ -2,12 +2,14 @@
 
 Runs the real pipeline (signed webhook -> worker ingest -> engagement agent). Without LLM keys
 the agent output is canned and marked as demo; with GROQ/GEMINI keys set it calls them for real.
-Login: demo@growthpilot.vn / demo12345
+The password is random unless SEED_DEMO_PASSWORD is set; it is printed once at the end.
 """
 
 import hashlib
 import hmac
 import json
+import os
+import secrets
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -20,7 +22,8 @@ from app.core.config import get_settings
 from app.main import app
 from app.social import meta
 
-EMAIL, PASSWORD = "demo@growthpilot.vn", "demo12345"
+EMAIL = "demo@growthpilot.vn"
+PASSWORD = os.environ.get("SEED_DEMO_PASSWORD") or secrets.token_urlsafe(12)
 PAGE_ID = "100200300400"
 
 CANNED = {

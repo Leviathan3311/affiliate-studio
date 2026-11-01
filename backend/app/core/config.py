@@ -81,6 +81,9 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()
-    if s.env != "dev" and (s.secret_key.startswith("dev-only") or not s.meta_app_secret):
-        raise RuntimeError("SECRET_KEY and META_APP_SECRET must be set outside dev")
+    weak_key = s.secret_key.startswith("dev-only") or len(s.secret_key) < 32
+    if s.env != "dev" and (weak_key or not s.meta_app_secret):
+        raise RuntimeError(
+            "SECRET_KEY (32+ characters) and META_APP_SECRET must be set outside dev"
+        )
     return s
