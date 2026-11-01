@@ -47,6 +47,7 @@ class Settings(BaseSettings):
 
     # LightRAG knowledge layer (system design §3.2); needs Postgres + Gemini, else keyword fallback
     lightrag_enabled: bool = True
+    lightrag_llm_model: str = "gemini-3.1-flash-lite"
     # Supabase CA file (Project Settings -> Database -> SSL) for verify-full TLS from LightRAG
     postgres_ssl_root_cert: str = ""
     knowledge_sync_seconds: int = 120

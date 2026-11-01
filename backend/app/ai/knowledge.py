@@ -35,7 +35,7 @@ SERVICE_LIMIT = 30
 FAQ_LIMIT = 5
 CONTEXT_CHARS = 2400  # ~600-800 tokens: Groq free tier is 8k TPM (system design §3.4)
 EMBED_DIM = 1536  # gemini-embedding-2 is 3072; 1536 fits pgvector HNSW (max 2000 dims)
-RETRIEVE_TIMEOUT = 8.0
+RETRIEVE_TIMEOUT = 12.0  # warm instance: embed + keyword call + PG queries
 _PRICE = re.compile(
     r"(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)\s*(k|nghìn|ngàn|tr|triệu|đ|vnđ|vnd)?(?!\w)",
     re.IGNORECASE,
@@ -295,7 +295,7 @@ async def _rag(workspace_id: uuid.UUID):
             graph_storage="PGTableGraphStorage",
             doc_status_storage="PGDocStatusStorage",
             llm_model_func=_llm,
-            llm_model_name=s.gemini_model,
+            llm_model_name=s.lightrag_llm_model,
             embedding_func=EmbeddingFunc(
                 embedding_dim=EMBED_DIM,
                 max_token_size=2048,
@@ -345,13 +345,20 @@ async def _llm(prompt, system_prompt=None, history_messages=None, **kwargs) -> s
     if system_prompt:
         body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
     errors = []
-    async with httpx.AsyncClient(timeout=180) as client:
-        for model in dict.fromkeys([s.gemini_model, *s.gemini_fallback_models]):
-            r = await client.post(
-                f"{_GEMINI}/{model}:generateContent",
-                headers={"x-goog-api-key": s.gemini_api_key},
-                json=body,
-            )
+    # Entity extraction and query keywords don't need the strongest model: lite first, short timeout
+    # so an overloaded model falls through to the next one instead of hanging the whole index run.
+    chain = [s.lightrag_llm_model, s.gemini_model, *s.gemini_fallback_models]
+    async with httpx.AsyncClient(timeout=60) as client:
+        for model in dict.fromkeys(chain):
+            try:
+                r = await client.post(
+                    f"{_GEMINI}/{model}:generateContent",
+                    headers={"x-goog-api-key": s.gemini_api_key},
+                    json=body,
+                )
+            except httpx.TransportError as e:  # timeouts included
+                errors.append(f"{model}: {type(e).__name__}")
+                continue
             if r.status_code == 200:
                 parts = r.json()["candidates"][0]["content"]["parts"]
                 return "".join(p.get("text", "") for p in parts)

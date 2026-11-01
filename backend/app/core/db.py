@@ -41,7 +41,10 @@ class IdMixin:
 
 
 def make_engine(url: str):
-    kwargs = {"connect_args": {"check_same_thread": False}} if url.startswith("sqlite") else {}
+    if url.startswith("sqlite"):
+        kwargs = {"connect_args": {"check_same_thread": False}}
+    else:  # poolers (Supabase/Supavisor) drop idle connections: test before use, recycle often
+        kwargs = {"pool_pre_ping": True, "pool_recycle": 300}
     return create_engine(url, **kwargs)
 
 
