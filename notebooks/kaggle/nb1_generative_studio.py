@@ -92,7 +92,19 @@ MODELS = [
 
 # %%
 def build_sdcpp() -> None:
-    """Compile sd-cli with CUDA for the T4 only (sm_75, no CUTLASS) to keep the build short."""
+    """Compile sd-cli with CUDA for the T4 only (sm_75, no CUTLASS) to keep the build short.
+
+    The build takes ~27 min, so a binary from an earlier run ships in the dataset when available
+    (build.py picks up notebooks/kaggle/prebuilt/sd-cli) and is used if it starts."""
+    prebuilt = HERE / "sd-cli"
+    if prebuilt.exists() and not SD_CLI.exists():
+        SD_CLI.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(prebuilt, SD_CLI)
+        SD_CLI.chmod(0o755)
+        res = subprocess.run([str(SD_CLI), "--help"], capture_output=True, text=True)
+        if "error while loading shared libraries" in res.stdout + res.stderr:
+            print("prebuilt sd-cli does not start here; building", flush=True)
+            SD_CLI.unlink()
     if SD_CLI.exists():
         return
     log_path = Path("/kaggle/working/sdcpp_build.log")
@@ -236,7 +248,7 @@ def flux_image(wf: str, prompt: str, ref: Path | None, seed: int, out: Path) -> 
     ffmpeg("-i", str(raw), "-vf", f"crop={W}:{H}", str(out))
 
 
-def stage_images(w: Worker, job: dict, d: Path) -> tuple[Path, Path]:
+def stage_images(w: Worker, job: dict, d: Path) -> tuple[Path, Path, Path | None]:
     p = job["payload"]
     refs = [r for r in p["references"] if r["role"] in ("product", "facility")]
     ref = w.download(refs[0]["url"], d / "reference.png") if refs else None
@@ -244,13 +256,16 @@ def stage_images(w: Worker, job: dict, d: Path) -> tuple[Path, Path]:
     if DRY_RUN:
         for path, color in ((master, "0xE8DCCB"), (thumb, "0xA3315A")):
             ffmpeg("-f", "lavfi", "-i", f"color=c={color}:s={W}x{H}", "-frames:v", "1", str(path))
-        return master, thumb
-    wf = "flux2_klein_ref" if ref else "flux2_klein_t2i"
+        return master, thumb, ref
     seed = random.randint(0, 2**31 - 1)
-    flux_image(wf, p["studio_master"]["prompt"], ref, seed, master)
+    flux_image(flux_wf(ref), p["studio_master"]["prompt"], ref, seed, master)
     w.progress("flux2:thumbnail", 0.2)
-    flux_image(wf, p["thumbnail"]["prompt"], ref, seed + 1, thumb)
-    return master, thumb
+    flux_image(flux_wf(ref), p["thumbnail"]["prompt"], ref, seed + 1, thumb)
+    return master, thumb, ref
+
+
+def flux_wf(ref: Path | None) -> str:
+    return "flux2_klein_ref" if ref else "flux2_klein_t2i"
 
 
 def h3_clip(prompt: str, image: Path, frames: int, seed: int, out: Path) -> None:
@@ -271,12 +286,17 @@ def h3_clip(prompt: str, image: Path, frames: int, seed: int, out: Path) -> None
     ffmpeg("-i", str(avi), *video_codec(), "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "32000", str(out))
 
 
-def stage_clips(w: Worker, job: dict, d: Path, master: Path) -> list[Path]:
+def stage_clips(w: Worker, job: dict, d: Path, master: Path, ref: Path | None) -> list[Path]:
     clips = []
     shots = job["payload"]["shots"]
     for i, shot in enumerate(shots):
         w.progress(f"minimax-h3:shot {i + 1}/{len(shots)}", 0.25 + 0.45 * i / len(shots))
         out = d / f"clip_{i}.mp4"
+        # Shots after the first start from their own frame (jobs queued before this have none).
+        frame = master
+        if shot.get("keyframe") and not DRY_RUN:
+            frame = d / f"frame_{i}.png"
+            flux_image(flux_wf(ref), shot["keyframe"]["prompt"], ref, random.randint(0, 2**31 - 1), frame)
         secs = max(2, min(10, round(shot["duration_seconds"])))
         if DRY_RUN:
             ffmpeg("-loop", "1", "-i", str(master), "-f", "lavfi", "-i", f"sine=frequency={300 + 100 * i}:duration={secs}",
@@ -285,7 +305,7 @@ def stage_clips(w: Worker, job: dict, d: Path, master: Path) -> list[Path]:
         else:
             # H3 has no negative-prompt input; the template writes constraints into the prompt instead.
             prompt = f"{shot['prompt']}\n\nAvoid: {shot['negative_prompt']}" if shot.get("negative_prompt") else shot["prompt"]
-            h3_clip(prompt, master, h3_frames(secs), random.randint(0, 2**31 - 1), out)
+            h3_clip(prompt, frame, h3_frames(secs), random.randint(0, 2**31 - 1), out)
         clips.append(out)
     return clips
 
@@ -326,10 +346,10 @@ def stage_mix(w: Worker, job: dict, d: Path, clips: list[Path], bgm: Path) -> Pa
 
 def handle(w: Worker, job: dict, d: Path) -> dict:
     w.progress("flux2:studio master", 0.05)
-    master, thumb = stage_images(w, job, d)
+    master, thumb, ref = stage_images(w, job, d)
     w.upload("studio_master", master)
     w.upload("thumbnail", thumb)
-    clips = stage_clips(w, job, d, master)
+    clips = stage_clips(w, job, d, master, ref)
     bgm = stage_bgm(w, job, d)
     final = stage_mix(w, job, d, clips, bgm)
     w.progress("upload", 0.95)

@@ -20,4 +20,5 @@ next-env.d.ts
 .taste-skill/
 .claude/
 notebooks/kaggle/dist/
+notebooks/kaggle/prebuilt/
 backend/certs/

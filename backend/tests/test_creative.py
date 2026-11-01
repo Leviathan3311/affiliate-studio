@@ -209,6 +209,10 @@ def test_project_to_kaggle_to_published_post(client, db, spa, gemini):
         "/api/v1/worker/jobs/claim", headers=w, json={"worker_id": "nb1", "kinds": ["studio"]}
     ).json()["job"]
     assert claimed["payload"]["references"][0]["url"]
+    # shot 1 animates the studio master; later shots get their own first frame
+    first, second = claimed["payload"]["shots"]
+    assert first["keyframe"] is None
+    assert "Keep it unchanged" in second["keyframe"]["prompt"]
     for up in claimed["uploads"].values():
         put_presigned(client, up["url"], b"x" * 10, up["content_type"])
     assert client.post(

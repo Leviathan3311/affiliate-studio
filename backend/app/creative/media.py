@@ -122,11 +122,25 @@ def create_studio_job(
         style=styles["image"],
         **common,
     )
+    # Each shot after the first starts from its own FLUX frame: animating the key visual into a
+    # different scene made H3 morph it (a face mask landed on a skin close-up of shot 1).
+    keyframes = [
+        compose(
+            modality="image",
+            task="Photoreal first frame of one shot of a vertical 9:16 spa video ad.",
+            subject=s["visual_prompt"],
+            references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
+            style=styles["image"],
+            **common,
+        )
+        for s in shots[1:]
+    ]
     clips = [
         compose(
             modality="video",
             task="Image-to-video with synchronized audio (SFX, ambience, voice if any), 9:16.",
-            subject=f"{s['description']}. {s['visual_prompt']}. Motion: {s['motion'] or 'slow push-in'}. "
+            # English only: the Vietnamese description adds nothing the video model can read.
+            subject=f"{s['visual_prompt']}. Motion: {s['motion'] or 'slow push-in'}. "
             f"Sound: {s['sfx'] or 'soft spa ambience'}.",
             style=styles["video"],
             **common,
@@ -172,8 +186,10 @@ def create_studio_job(
                 "negative_prompt": c.negative_prompt,
                 "duration_seconds": s["duration_seconds"],
                 "model": c.model,
+                # None for the first shot: it starts from the studio master
+                "keyframe": {"prompt": k.prompt, "model": k.model} if k else None,
             }
-            for c, s in zip(clips, shots, strict=True)
+            for c, s, k in zip(clips, shots, [None, *keyframes], strict=True)
         ],
         "bgm": {"prompt": bgm.prompt, "duration_seconds": duration, "model": bgm.model},
         "mix": {"bgm_volume": 0.25},
@@ -183,6 +199,7 @@ def create_studio_job(
         "studio_master": master.to_dict(),
         "thumbnail": thumbnail.to_dict(),
         "shots": [c.to_dict() for c in clips],
+        "keyframes": [k.to_dict() for k in keyframes],
         "bgm": bgm.to_dict(),
         "user_instruction": extra_instruction,
         "created_at": utcnow().isoformat(),

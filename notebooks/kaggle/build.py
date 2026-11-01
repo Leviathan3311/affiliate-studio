@@ -45,6 +45,10 @@ def main() -> None:
     shutil.copy(HERE / "gp_worker.py", ds)
     for f in (HERE / "workflows").glob("*.json"):  # flat: `kaggle datasets` skips subfolders
         shutil.copy(f, ds)
+    # sd-cli built on Kaggle by an earlier run (`kaggle kernels output ... --file-pattern
+    # 'build/bin/sd-cli'`); saves the ~27 min build in every session. Not in git (113 MB).
+    if (HERE / "prebuilt" / "sd-cli").exists():
+        shutil.copy(HERE / "prebuilt" / "sd-cli", ds)
     (ds / "dataset-metadata.json").write_text(json.dumps(
         {"title": "growthpilot-worker", "id": DATASET, "licenses": [{"name": "other"}]}, indent=2))
     for name, (src, title) in KERNELS.items():
