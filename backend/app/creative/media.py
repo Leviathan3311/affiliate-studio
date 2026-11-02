@@ -12,7 +12,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.agents import brand_facts
+from app.ai.agents import VIDEO_SHOTS, brand_facts
 from app.core import storage
 from app.core.config import get_settings
 from app.core.db import utcnow
@@ -27,7 +27,7 @@ from app.models import (
     StorageObject,
 )
 
-MAX_SHOTS = 3  # each MiniMax H3 clip is a few seconds; 3 shots ~ a 15-20s ad
+MAX_SHOTS = VIDEO_SHOTS
 MAX_SHORTS = 5
 MIME = {
     "png": "image/png",
@@ -81,6 +81,18 @@ def _references(db: Session, project: Project, roles: tuple[str, ...]) -> list[d
     ]
 
 
+def _continuity(script: dict) -> str:
+    """The script's fixed product, person and room, appended to every shot so each separately
+    generated frame shows the same ones (scripts written before this have none)."""
+    c = script.get("continuity") or {}
+    parts = [
+        f"{label}: {c[k].strip()}"
+        for k, label in (("product", "Product"), ("talent", "Person"), ("setting", "Setting"))
+        if c.get(k, "").strip()
+    ]
+    return " Same in every shot. " + "; ".join(parts) + "." if parts else ""
+
+
 def create_studio_job(
     db: Session,
     project: Project,
@@ -103,12 +115,13 @@ def create_studio_job(
     }
     shots = script["shots"][:MAX_SHOTS]
     first = shots[0]
+    same = _continuity(script)
 
     master = compose(
         modality="image",
         task="Photoreal studio advertising key visual, vertical 9:16, product kept identical to the "
         "reference photo with the background re-staged.",
-        subject=first["visual_prompt"],
+        subject=first["visual_prompt"] + same,
         references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
         style=styles["image"],
         **common,
@@ -117,18 +130,21 @@ def create_studio_job(
         modality="image",
         task=f'Vertical 9:16 Facebook thumbnail/banner with the headline text "{script["hook"]}" '
         "rendered crisp and correctly spelled in Vietnamese.",
-        subject=first["visual_prompt"],
+        subject=first["visual_prompt"] + same,
         references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
         style=styles["image"],
         **common,
     )
     # Each shot after the first starts from its own FLUX frame: animating the key visual into a
-    # different scene made H3 morph it (a face mask landed on a skin close-up of shot 1).
+    # different scene made H3 morph it (a face mask landed on a skin close-up of shot 1). The
+    # notebook passes the studio master as the reference image, so person, product and room carry.
     keyframes = [
         compose(
             modality="image",
-            task="Photoreal first frame of one shot of a vertical 9:16 spa video ad.",
-            subject=s["visual_prompt"],
+            task="Photoreal first frame of the next shot of the same vertical 9:16 spa video ad. "
+            "Keep the product, the person and the room of the reference image; change only the "
+            "camera framing and the action.",
+            subject=s["visual_prompt"] + same,
             references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
             style=styles["image"],
             **common,
@@ -141,7 +157,7 @@ def create_studio_job(
             task="Image-to-video with synchronized audio (SFX, ambience, voice if any), 9:16.",
             # English only: the Vietnamese description adds nothing the video model can read.
             subject=f"{s['visual_prompt']}. Motion: {s['motion'] or 'slow push-in'}. "
-            f"Sound: {s['sfx'] or 'soft spa ambience'}.",
+            f"Sound: {s['sfx'] or 'soft spa ambience'}.{same}",
             style=styles["video"],
             **common,
         )

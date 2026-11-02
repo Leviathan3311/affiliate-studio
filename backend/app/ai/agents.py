@@ -257,6 +257,15 @@ class Shot(BaseModel):
     duration_seconds: float = Field(default=4, ge=1, le=15)
 
 
+class Continuity(BaseModel):
+    """What stays the same in every shot, in English, repeated in each image/video prompt so the
+    generated frames show one product, one person and one room instead of a new one per shot."""
+
+    product: str = ""  # exact look of the product and how it is used, e.g. worn on the face
+    talent: str = ""  # the customer on screen: age, look, hair, clothing
+    setting: str = ""  # the room, props, light and colours
+
+
 class ScriptVariant(BaseModel):
     title: str
     angle: str
@@ -269,6 +278,7 @@ class ScriptVariant(BaseModel):
     music_mood: str = ""
     caption: str = ""
     hashtags: list[str] = []
+    continuity: Continuity = Continuity()
     shots: list[Shot] = Field(min_length=1, max_length=8)
 
 
@@ -276,11 +286,27 @@ class ScriptsOut(BaseModel):
     variants: list[ScriptVariant] = Field(min_length=1, max_length=5)
 
 
-SCRIPT_RULES = """Mỗi kịch bản là quảng cáo video ngắn 9:16 cho Facebook Page/Reels (15-30 giây) có ảnh \
-thumbnail. Các shot đầu tiên dùng ảnh studio của sản phẩm/cơ sở làm khung chính (image-to-video).
-visual_prompt: mô tả ảnh tĩnh bằng tiếng Anh cho model ảnh (chủ thể, bối cảnh, ánh sáng), KHÔNG nhắc phong \
-cách chung (hệ thống tự ghép Style Pack). motion: chuyển động máy quay/chủ thể bằng tiếng Anh. \
-music_mood: tag nhạc nền tiếng Anh. caption/hook/cta/on_screen_text: tiếng Việt."""
+VIDEO_SHOTS = 3  # each MiniMax H3 clip is a few seconds; 3 shots ~ a 15-20s ad
+
+SCRIPT_RULES = f"""Mỗi kịch bản là quảng cáo video ngắn 9:16 cho Facebook Page/Reels (15-20 giây) có ảnh \
+thumbnail. Viết ĐÚNG {VIDEO_SHOTS} shot, mỗi shot 5-7 giây: video chỉ dựng {VIDEO_SHOTS} cảnh, nên câu chuyện \
+phải trọn vẹn (mở, dùng sản phẩm, kết quả) trong {VIDEO_SHOTS} shot đó. Mỗi shot được tạo RIÊNG bằng model ảnh \
+rồi model video, model không nhớ shot trước, nên kịch bản phải tự giữ cho các shot liền mạch:
+- Kịch bản là MỘT câu chuyện liên tục: cùng một sản phẩm, cùng một khách, cùng một phòng từ đầu đến \
+cuối; shot sau là hành động tiếp theo của shot trước (ví dụ: cầm mặt nạ lên → đeo mặt nạ lên mặt → mặt \
+nạ phát sáng trên mặt → tháo ra, da mặt rạng rỡ), không nhảy sang vật hay người khác.
+- continuity (tiếng Anh) viết TRƯỚC các shot: product = hình dáng, màu, chất liệu của sản phẩm thật \
+theo tài liệu và cách dùng trên cơ thể (ví dụ "a flexible white silicone full-face LED mask with eye \
+openings, worn over the face, glowing teal-green light from the inside"); talent = khách trên hình \
+(tuổi, ngoại hình, tóc, trang phục); setting = phòng, đạo cụ, ánh sáng, tông màu.
+- visual_prompt (tiếng Anh) của MỖI shot: gọi sản phẩm và người bằng đúng cụm từ trong continuity, \
+nói rõ sản phẩm đang ở đâu (trên mặt, trên khay, trong tay), cỡ cảnh (close-up, medium, wide) và việc \
+đang diễn ra. Không bao giờ thay sản phẩm bằng thiết bị khác (ví dụ mặt nạ thì không thành máy cầm \
+tay), không đặt sản phẩm lên vùng cơ thể mà nó không dùng cho. KHÔNG nhắc phong cách chung (hệ thống tự \
+ghép Style Pack).
+- description (tiếng Việt) kể đúng cảnh đó, khớp với visual_prompt.
+- motion: chuyển động máy quay/chủ thể bằng tiếng Anh, nối được với shot sau. music_mood: tag nhạc nền \
+tiếng Anh. caption/hook/cta/on_screen_text: tiếng Việt."""
 
 
 def _script_flags(db: Session, project: Project, variant: dict) -> list[str]:
@@ -307,8 +333,8 @@ nhau rõ rệt về góc tiếp cận (ví dụ: giải quyết nỗi lo, ưu đ
 {GUARDRAILS}
 Nếu không có research report, ghi rõ trong "insight" rằng đây là giả định.
 Trả JSON: {{"variants":[{{"title","angle","insight","hook","key_message","cta","duration_seconds",
-"voiceover","music_mood","caption","hashtags":[],"shots":[{{"description","visual_prompt","motion",
-"on_screen_text","sfx","duration_seconds"}}]}}]}}"""
+"voiceover","music_mood","caption","hashtags":[],"continuity":{{"product","talent","setting"}},
+"shots":[{{"description","visual_prompt","motion","on_screen_text","sfx","duration_seconds"}}]}}]}}"""
     parts = [{"text": project_brief(db, project)}]
     if research:
         slim = {
@@ -348,7 +374,8 @@ def revise_script(
 yêu cầu đổi. {SCRIPT_RULES}
 {GUARDRAILS}
 Trả JSON đúng schema của kịch bản (title, angle, insight, hook, key_message, cta, duration_seconds,
-voiceover, music_mood, caption, hashtags, shots)."""
+voiceover, music_mood, caption, hashtags, continuity, shots). Sửa một shot thì giữ nguyên continuity, \
+trừ khi được yêu cầu đổi sản phẩm, người hoặc bối cảnh; đổi continuity thì sửa mọi shot cho khớp."""
     clean = {k: v for k, v in script.items() if k != "flags"}
     res = gemini_json(
         db,

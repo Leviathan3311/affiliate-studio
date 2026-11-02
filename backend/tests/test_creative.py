@@ -23,6 +23,11 @@ SCRIPT = {
     "music_mood": "soft piano ambient",
     "caption": "Massage đá nóng 650.000đ",
     "hashtags": ["#spa"],
+    "continuity": {
+        "product": "smooth black basalt stones",
+        "talent": "a Vietnamese woman in her thirties, hair in a bun",
+        "setting": "",
+    },
     "shots": [
         {
             "description": "Đá nóng trên lưng",
@@ -196,6 +201,10 @@ def test_project_to_kaggle_to_published_post(client, db, spa, gemini):
     assert snap["styles"]["image"]["pack_name"] == "Luxury Beige Spa"  # platform preset default
     assert "Keep it unchanged" in snap["studio_master"]["prompt"]  # preserved product reference
     assert len(snap["shots"]) == 2
+    # one product, person and room in every separately generated frame and clip
+    for c in [snap["studio_master"], *snap["keyframes"], *snap["shots"]]:
+        assert "Product: smooth black basalt stones; Person: a Vietnamese woman" in c["prompt"]
+    assert "Setting:" not in snap["shots"][0]["prompt"]  # empty parts are left out
 
     # Kaggle notebook 1
     w = {"Authorization": "Bearer worker-secret"}

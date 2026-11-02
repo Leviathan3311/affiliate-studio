@@ -316,6 +316,7 @@ export interface Script {
   music_mood: string;
   caption: string;
   hashtags: string[];
+  continuity?: { product: string; talent: string; setting: string };
   shots: Shot[];
   flags?: string[];
   instruction?: string;

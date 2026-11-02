@@ -58,6 +58,20 @@ export function ScriptView({
           </div>
         ))}
       </dl>
+      {s.continuity && (s.continuity.product || s.continuity.talent || s.continuity.setting) && (
+        <>
+          <h3 className="mt-7 text-sm font-semibold">Giữ giống nhau ở mọi cảnh</h3>
+          <p className="mt-1 text-xs text-faint">AI tạo hình đọc phần này (tiếng Anh) để mọi cảnh có cùng sản phẩm, cùng người, cùng căn phòng.</p>
+          <dl className="mt-3 grid gap-4 sm:grid-cols-3">
+            {([["Sản phẩm", s.continuity.product], ["Người trên hình", s.continuity.talent], ["Bối cảnh", s.continuity.setting]] as const).map(([k, v]) => (
+              <div key={k}>
+                <dt className="text-xs text-faint">{k}</dt>
+                <dd className="mt-1 text-sm leading-relaxed">{v || "—"}</dd>
+              </div>
+            ))}
+          </dl>
+        </>
+      )}
       <h3 className="mt-7 text-sm font-semibold">Các cảnh quay · {s.shots.length}</h3>
       <div className="mt-2 overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
