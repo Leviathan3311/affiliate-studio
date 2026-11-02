@@ -1000,7 +1000,8 @@ def chat(project_id: uuid.UUID, body: ChatIn, ctx: Marketing, bg: BackgroundTask
 CONTINUITY_UPGRADE = (
     "Thêm continuity (product, talent, setting) theo đúng sản phẩm của kịch bản, rồi viết lại "
     "visual_prompt và description của mọi shot cho cùng một sản phẩm, cùng người, cùng phòng, "
-    "bỏ mọi đồ hoạ hay hiệu ứng số. Giữ nguyên câu chuyện, hook, cta và lời thoại."
+    "bỏ mọi đồ hoạ hay hiệu ứng số, bỏ cảnh đang đeo vào hay đang tháo ra. Giữ nguyên câu chuyện, "
+    "hook, cta và lời thoại."
 )
 
 

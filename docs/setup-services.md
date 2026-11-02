@@ -11,7 +11,7 @@ Thứ tự nên làm:
 3. [Google AI Studio](#3-google-ai-studio-gemini) và [Groq](#4-groq-qwen): AI
 4. [Langfuse](#5-langfuse-theo-dõi-ai): theo dõi AI
 5. [Meta for Developers](#6-meta-for-developers-fanpage-và-messenger): Fanpage và Messenger
-6. [Hugging Face](#7-hugging-face) và [Kaggle](#8-kaggle-gpu-tạo-ảnh-video): GPU tạo ảnh, video
+6. [Hugging Face](#7-hugging-face), [Modal](#8-modal-gpu-l40s-tự-bật-khi-có-việc) hoặc [Kaggle](#9-kaggle-gpu-miễn-phí-bật-tay): GPU tạo ảnh, video
 
 Trước khi bắt đầu, tạo sẵn các khoá bí mật của riêng hệ thống:
 
@@ -211,9 +211,41 @@ Notebook tải mô hình tạo ảnh, video, nhạc từ Hugging Face; có token
 
 1. Đăng ký <https://huggingface.co/join>.
 2. **Settings → Access Tokens → Create new token**, loại **Read**.
-3. Token này **chỉ điền trên Kaggle** (bước 8), không cần trong `backend/.env`.
+3. Token này điền vào secret của Modal (bước 8) hoặc Kaggle (bước 9). Nếu dùng Modal, ghi thêm `HF_TOKEN=` vào `backend/.env` để lệnh tạo secret đọc được.
 
-## 8. Kaggle: GPU tạo ảnh, video
+## 8. Modal: GPU L40S tự bật khi có việc
+
+Nên dùng cách này. Khi bạn bấm **Tạo ảnh & video**, API tự bật một GPU L40S 48GB trên Modal; làm xong và rảnh 2 phút thì tự tắt nên không tốn tiền lúc chờ. Một video 3 cảnh mất khoảng 10–15 phút (Kaggle T4: khoảng 75 phút). Gói Starter có $30 miễn phí mỗi tháng, một video tốn khoảng $0.4–0.7; xem số thật ở mục **Usage** trên modal.com.
+
+1. Đăng ký <https://modal.com/signup>, rồi đăng nhập trên máy chạy API:
+
+   ```bash
+   uvx modal token new
+   ```
+
+2. Tạo secret `growthpilot-worker` từ `backend/.env`, không hiện giá trị ra màn hình (chạy ở thư mục gốc của repo):
+
+   ```bash
+   f=$(mktemp) && chmod 600 "$f" && { echo "GP_API_URL=$(grep -E '^API_PUBLIC_URL=' backend/.env | cut -d= -f2-)"; grep -E '^(MEDIA_WORKER_TOKEN|HF_TOKEN)=' backend/.env; } > "$f" && uvx --with python-dotenv modal secret create growthpilot-worker --from-dotenv "$f" --force; rm -f "$f"
+   ```
+
+3. Deploy. Lần đầu mất khoảng 50 phút vì Modal biên dịch sd-cli cho L40S; các lần sau chỉ vài giây:
+
+   ```bash
+   uvx modal deploy notebooks/modal/growthpilot.py
+   ```
+
+4. Tải khoảng 59GB mô hình về ổ lưu của Modal (chạy bằng CPU, làm một lần):
+
+   ```bash
+   uvx modal run notebooks/modal/growthpilot.py::download
+   ```
+
+5. Thêm `MODAL_APP=growthpilot` vào `backend/.env`, rồi khởi động lại API và worker.
+
+Mỗi lần sửa `notebooks/kaggle/*.py` thì chạy lại bước 3. Nếu Modal lỗi hoặc hết tiền, API chỉ ghi log; khi đó chạy Kaggle bằng tay như bước 9.
+
+## 9. Kaggle: GPU miễn phí, bật tay
 
 Kaggle cho dùng GPU miễn phí khoảng 30 giờ mỗi tuần. Notebook tự hỏi API xem có việc không, làm xong thì tải kết quả lên R2. Notebook không giữ khoá cơ sở dữ liệu hay R2.
 

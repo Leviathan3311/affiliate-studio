@@ -22,3 +22,6 @@ next-env.d.ts
 notebooks/kaggle/dist/
 notebooks/kaggle/prebuilt/
 backend/certs/
+
+# local code graph from the graphify tool
+graphify-out/

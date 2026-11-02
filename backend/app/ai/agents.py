@@ -296,8 +296,9 @@ rồi model video, model không nhớ shot trước, nên kịch bản phải t�
 cuối; shot sau là hành động tiếp theo của shot trước (ví dụ: cầm mặt nạ lên → đeo mặt nạ lên mặt → mặt \
 nạ phát sáng trên mặt → tháo ra, da mặt rạng rỡ), không nhảy sang vật hay người khác.
 - continuity (tiếng Anh) viết TRƯỚC các shot: product = hình dáng, màu, chất liệu của sản phẩm thật \
-theo tài liệu và cách dùng trên cơ thể (ví dụ "a flexible white silicone full-face LED mask with eye \
-openings, worn over the face, glowing teal-green light from the inside"); talent = khách trên hình \
+theo tài liệu và cách dùng trên cơ thể, nói rõ CÓ hay KHÔNG có dây đeo, dây cáp, bộ điều khiển (ví \
+dụ "a flexible white silicone full-face LED mask with eye openings, no straps and no cables, rests on \
+the face, glowing teal-green light from the inside"); model hay tự vẽ thêm những thứ này; talent = khách trên hình \
 (tuổi, ngoại hình, tóc, trang phục); setting = phòng, đạo cụ, ánh sáng, tông màu (không ghi tên spa hay \
 chữ nào: model sẽ vẽ chữ đó lên hình và viết sai).
 - visual_prompt (tiếng Anh) của MỖI shot: gọi sản phẩm và người bằng đúng cụm từ trong continuity, \
@@ -309,6 +310,9 @@ ghép Style Pack).
 ánh sáng, sơ đồ, cấu trúc collagen, hologram), không chia đôi màn hình, không chữ hay logo trong hình. \
 Công dụng thể hiện qua người thật dùng sản phẩm thật (ví dụ mặt nạ phát sáng trên mặt khách đang nằm thư \
 giãn), không vẽ cơ chế bên trong da.
+- Mỗi shot MỘT hành động đơn giản, chậm, tay ít chạm sản phẩm. Không quay lúc đang đeo vào hay đang \
+tháo ra (model video vẽ thêm dây, thêm tay, thêm sản phẩm); quay trạng thái trước hoặc sau: mặt nạ đã \
+nằm trên mặt, hoặc đã nằm yên trong tay/trên khay. Mỗi khung chỉ có MỘT sản phẩm.
 - description (tiếng Việt) kể đúng cảnh đó, khớp với visual_prompt.
 - motion: chuyển động máy quay/chủ thể bằng tiếng Anh, nối được với shot sau. music_mood: tag nhạc nền \
 tiếng Anh. caption/hook/cta/on_screen_text: tiếng Việt."""

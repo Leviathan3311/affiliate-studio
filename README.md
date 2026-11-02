@@ -113,6 +113,8 @@ docker compose up --build
 
 Every external service has a free tier that is enough for one spa. Step-by-step sign-up guide (Vietnamese): **[docs/setup-services.md](docs/setup-services.md)**.
 
+**GPU on Modal (recommended).** After `uvx modal token new`, create the `growthpilot-worker` secret (`GP_API_URL`, `MEDIA_WORKER_TOKEN`, `HF_TOKEN`), run `uvx modal deploy notebooks/modal/growthpilot.py` (about 50 min the first time, to compile sd-cli for the L40S) and `uvx modal run notebooks/modal/growthpilot.py::download` (about 59 GB of models, once), then set `MODAL_APP=growthpilot`. Details in step 8 of the setup guide.
+
 | Service | Used for | Settings |
 | --- | --- | --- |
 | Supabase | PostgreSQL database | `DATABASE_URL`, `POSTGRES_SSL_ROOT_CERT` |

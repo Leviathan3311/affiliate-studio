@@ -205,9 +205,8 @@ def test_project_to_kaggle_to_published_post(client, db, spa, gemini):
     for c in [snap["studio_master"], *snap["keyframes"], *snap["shots"]]:
         assert "Product: smooth black basalt stones; Person: a Vietnamese woman" in c["prompt"]
     assert "Setting:" not in snap["shots"][0]["prompt"]  # empty parts are left out
-    # brand text only on the thumbnail; models misspelled it when painted onto every frame
-    assert "Facts to keep" in snap["thumbnail"]["prompt"]
-    for c in [snap["studio_master"], *snap["keyframes"], *snap["shots"]]:
+    # models misspell painted text: no brand facts in any picture, the headline is drawn later
+    for c in [snap["studio_master"], snap["thumbnail"], *snap["keyframes"], *snap["shots"]]:
         assert "Facts to keep" not in c["prompt"] and "No text, letters, logos" in c["prompt"]
 
     # Kaggle notebook 1
@@ -222,6 +221,7 @@ def test_project_to_kaggle_to_published_post(client, db, spa, gemini):
         "/api/v1/worker/jobs/claim", headers=w, json={"worker_id": "nb1", "kinds": ["studio"]}
     ).json()["job"]
     assert claimed["payload"]["references"][0]["url"]
+    assert claimed["payload"]["thumbnail"]["headline"] == SCRIPT["hook"]  # drawn by the notebook
     # shot 1 animates the studio master; later shots get their own first frame
     first, second = claimed["payload"]["shots"]
     assert first["keyframe"] is None

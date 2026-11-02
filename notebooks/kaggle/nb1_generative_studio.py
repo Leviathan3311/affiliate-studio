@@ -244,9 +244,9 @@ def comfy_run(name: str, modality: str, values: dict, out: Path, timeout: int = 
 # %%
 W, H = 1080, 1920
 GEN_W = 1088  # FLUX.2 latents need multiples of 16; cropped back to W
-# MiniMax H3 on a T4 (multiples of 32); stage_mix scales to W x H. 480x864 took ~0.2 min per frame
-# (a 6 s shot ~30 min); 384x672 has 62% of the pixels: ~1.5x faster, keeps more detail than 320x576.
-VIDEO_W, VIDEO_H = 384, 672
+# MiniMax H3 size (multiples of 32); stage_mix scales to W x H. On a T4 480x864 took ~0.2 min per
+# frame (a 6 s shot ~30 min), so Kaggle renders 384x672. The L40S did 384x672 in ~2 min per shot.
+VIDEO_W, VIDEO_H = (480, 864) if GPU_LAYOUT == "single" else (384, 672)
 
 
 def h3_frames(seconds: float) -> int:
@@ -274,7 +274,40 @@ def stage_images(w: Worker, job: dict, d: Path) -> tuple[Path, Path]:
     flux_image(flux_wf(ref), p["studio_master"]["prompt"], ref, seed, master)
     w.progress("flux2:thumbnail", 0.2)
     flux_image(flux_wf(ref), p["thumbnail"]["prompt"], ref, seed + 1, thumb)
+    if p["thumbnail"].get("headline"):  # jobs queued before this asked FLUX to paint the text
+        draw_headline(thumb, p["thumbnail"]["headline"])
     return master, thumb
+
+
+FONT_URL = "https://github.com/google/fonts/raw/main/ofl/bevietnampro/BeVietnamPro-Bold.ttf"
+
+
+def draw_headline(path: Path, text: str) -> None:
+    """Draw the headline in a real Vietnamese font over the thumbnail's calm upper third:
+    FLUX misspells Vietnamese diacritics ("Kiểh hagi lân da")."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    font_file = ROOT / "BeVietnamPro-Bold.ttf"
+    if not font_file.exists():
+        r = requests.get(FONT_URL, timeout=60)
+        r.raise_for_status()
+        font_file.write_bytes(r.content)
+    img = Image.open(path).convert("RGB")
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype(str(font_file), 88)
+    lines = [""]
+    for word in text.split():
+        trial = f"{lines[-1]} {word}".strip()
+        if lines[-1] and draw.textlength(trial, font=font) > W * 0.84:
+            lines.append(word)
+        else:
+            lines[-1] = trial
+    y = int(H * 0.08)
+    for line in lines:
+        x = (W - draw.textlength(line, font=font)) / 2
+        draw.text((x, y), line, font=font, fill="white", stroke_width=4, stroke_fill=(60, 45, 35))
+        y += int(font.size * 1.25)
+    img.save(path)
 
 
 def flux_wf(ref: Path | None) -> str:

@@ -111,13 +111,12 @@ def create_studio_job(
 ) -> MediaJob:
     script = script_version.content
     refs = _references(db, project, ("product", "facility", "logo", "staff"))
-    facts = brand_facts(db, project)
     styles = {
         m: resolve_style(db, project.workspace_id, project.id, m)
         for m in ("image", "video", "audio")
     }
-    # Brand facts only go to the thumbnail, the one picture with text: given to every frame, the
-    # models painted the spa name onto the set and misspelled it.
+    # No brand facts in any picture prompt: the models painted the spa name onto the set and
+    # misspelled it. The thumbnail headline is drawn by the notebook in a real Vietnamese font.
     common = {"extra_instruction": extra_instruction, "disable_style": disable_style}
     shots = script["shots"][:MAX_SHOTS]
     first = shots[0]
@@ -134,12 +133,11 @@ def create_studio_job(
     )
     thumbnail = compose(
         modality="image",
-        task=f'Vertical 9:16 Facebook thumbnail/banner with the headline text "{script["hook"]}" '
-        "rendered crisp and correctly spelled in Vietnamese.",
+        task="Vertical 9:16 Facebook thumbnail/banner. Keep the upper third a calm, plain background "
+        f"for a headline that is added afterwards.{NO_TEXT}",
         subject=first["visual_prompt"] + same,
         references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
         style=styles["image"],
-        brand_facts=facts,
         **common,
     )
     # Each shot after the first starts from its own FLUX frame: animating the key visual into a
@@ -149,8 +147,8 @@ def create_studio_job(
         compose(
             modality="image",
             task="Photoreal first frame of the next shot of the same vertical 9:16 spa video ad. "
-            "Keep the product, the person and the room of the reference image; change only the "
-            f"camera framing and the action.{NO_TEXT}",
+            "Same person, room and product design as the reference image, but the product is only "
+            f"where this shot puts it; new camera framing and action.{NO_TEXT}",
             subject=s["visual_prompt"] + same,
             references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
             style=styles["image"],
@@ -202,7 +200,11 @@ def create_studio_job(
         "aspect_ratio": "9:16",
         "references": refs,
         "studio_master": {"prompt": master.prompt, "model": master.model},
-        "thumbnail": {"prompt": thumbnail.prompt, "model": thumbnail.model},
+        "thumbnail": {
+            "prompt": thumbnail.prompt,
+            "model": thumbnail.model,
+            "headline": script["hook"],
+        },
         "shots": [
             {
                 "prompt": c.prompt,
