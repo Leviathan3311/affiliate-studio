@@ -6,6 +6,7 @@ crop + karaoke subtitles. Notebooks poll /worker/jobs/claim and upload straight 
 presigned PUT URLs handed out here, so they never hold storage credentials.
 """
 
+import logging
 import uuid
 from datetime import timedelta
 
@@ -43,6 +44,8 @@ CATEGORY = {
     "audio/wav": "audio",
     "text/plain": "subtitle",
 }
+
+log = logging.getLogger("growthpilot.media")
 
 
 def _key(job: MediaJob, name: str) -> str:
@@ -426,8 +429,24 @@ def fail(db: Session, job: MediaJob, error: str, retryable: bool) -> None:
             art.status, art.error = "failed", error[:500]
 
 
+def wake_worker(kind: str) -> None:
+    """Start the Modal worker for this job kind unless one is already running or starting."""
+    app = get_settings().modal_app
+    if not app:
+        return
+    try:
+        import modal
+
+        fn = modal.Function.from_name(app, kind)
+        stats = fn.get_current_stats()
+        if stats.num_total_runners == 0 and stats.backlog == 0:
+            fn.spawn()
+    except Exception as e:  # noqa: BLE001 — Kaggle stays a manual fallback; never fail the request
+        log.warning("could not start the %s worker on Modal: %s", kind, type(e).__name__)
+
+
 def requeue_stale(db: Session) -> int:
-    """Kaggle sessions die (12h limit, quota): give abandoned jobs back to the queue."""
+    """Kaggle sessions die (12h limit, quota) and Modal containers time out: give abandoned jobs back."""
     cutoff = utcnow() - timedelta(minutes=get_settings().media_job_stale_minutes)
     stale = db.scalars(
         select(MediaJob).where(MediaJob.status == "running", MediaJob.heartbeat_at < cutoff)

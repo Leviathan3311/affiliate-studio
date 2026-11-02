@@ -17,9 +17,9 @@ from app.ai import knowledge
 from app.core.config import get_settings
 from app.core.db import SessionLocal, utcnow
 from app.core.observability import flush
-from app.creative.media import requeue_stale
+from app.creative.media import requeue_stale, wake_worker
 from app.creative.publishing import due_jobs, run_job
-from app.models import Conversation, WebhookEvent, Workspace
+from app.models import Conversation, MediaJob, WebhookEvent, Workspace
 from app.social.engagement import ingest_event, run_agent
 from app.social.integrations import accept_webhook
 
@@ -144,7 +144,13 @@ def sync_knowledge(db: Session) -> int:
 
 def run_once() -> int:
     with SessionLocal() as db:
-        requeue_stale(db)
+        if requeue_stale(db):
+            db.commit()
+            # the worker that held them is gone; start a new one for whatever is now waiting
+            for kind in db.scalars(
+                select(MediaJob.kind).where(MediaJob.status == "queued").distinct()
+            ):
+                wake_worker(kind)
         db.commit()
         try:
             edge = drain_edge_queue(db)

@@ -33,7 +33,7 @@ flowchart LR
     A --> DB[(PostgreSQL<br/>Supabase)]
     A --> S[(File storage<br/>Cloudflare R2)]
     A --> AI[Gemini · Groq]
-    K[GPU workers<br/>Kaggle notebooks] -->|claim jobs via API| A
+    K[GPU workers<br/>Modal · Kaggle] -->|claim jobs via API| A
     K -->|upload results| S
     T[Cloudflare Tunnel] -.public HTTPS.- A
 ```
@@ -41,7 +41,7 @@ flowchart LR
 - **One backend, split into domain modules** (`workspace`, `social`, `creative`, `ai`, `core`). It runs on a single machine today and can be split later.
 - **PostgreSQL is also the job queue** (`SELECT … FOR UPDATE SKIP LOCKED`) and the AI knowledge store (pgvector through LightRAG). No Redis or separate vector database.
 - **Files never pass through the backend.** Browsers and GPU workers upload straight to R2 with presigned URLs.
-- **GPU workers hold no database credentials.** A notebook only has a token for a few worker-only endpoints, so it can run on Kaggle or any rented GPU.
+- **GPU workers hold no database credentials.** A notebook only has a token for a few worker-only endpoints, so it can run on Modal, Kaggle or any rented GPU. On Modal the API starts it when a job is queued and it stops after 2 idle minutes.
 
 ## Stack
 
@@ -52,7 +52,7 @@ flowchart LR
 | Data | PostgreSQL (Supabase) + pgvector, LightRAG; SQLite for local runs |
 | Text AI | Google Gemini (research, scripts, document reading, project assistants), Groq Qwen (customer replies) |
 | Image, video, audio AI | FLUX.2 klein, MiniMax H3, ACE-Step 1.5 via ComfyUI and stable-diffusion.cpp; WhisperX; FFmpeg |
-| Infrastructure | Cloudflare R2, Tunnel, Pages · Kaggle GPUs · Langfuse |
+| Infrastructure | Cloudflare R2, Tunnel, Pages · Modal and Kaggle GPUs · Langfuse |
 
 ## Repository layout
 
@@ -67,6 +67,7 @@ backend/            FastAPI API + background worker
   tests/
 frontend/           Next.js web app
 notebooks/kaggle/   GPU workers: Notebook 1 (images, video, music), Notebook 2 (Shorts)
+notebooks/modal/    Notebook 1 as an on-demand Modal app
 docs/               service setup and Meta app review guides
 ```
 
@@ -119,7 +120,8 @@ Every external service has a free tier that is enough for one spa. Step-by-step 
 | Groq | Qwen: fast customer replies | `GROQ_API_KEY` |
 | Cloudflare | Domain, Tunnel for the API, R2 for files, Pages for the web | `API_PUBLIC_URL`, `R2_*` |
 | Meta for Developers | Page connection, Messenger, publishing | `META_APP_ID`, `META_APP_SECRET`, `META_VERIFY_TOKEN` |
-| Kaggle + Hugging Face | Free GPUs for images, video and music | `MEDIA_WORKER_TOKEN` (+ Kaggle secrets) |
+| Modal + Hugging Face | L40S GPU for images, video and music, started on demand ($30 free credit a month); see [`notebooks/modal/growthpilot.py`](notebooks/modal/growthpilot.py) | `MEDIA_WORKER_TOKEN`, `MODAL_APP` (+ Modal secret) |
+| Kaggle | Free T4 GPUs, started by hand: the fallback when Modal is off | Kaggle secrets |
 | Langfuse | AI quality and cost tracing | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` |
 
 Every setting is listed and explained in [`backend/.env.example`](backend/.env.example) and [`frontend/.env.example`](frontend/.env.example).
@@ -138,7 +140,7 @@ cd frontend && npx tsc --noEmit && npm run lint && npm run build
 
 ## Security
 
-- Keys and passwords live only in `backend/.env` (ignored by Git) and in Kaggle Secrets. Never put them in source code.
+- Keys and passwords live only in `backend/.env` (ignored by Git) and in Modal or Kaggle secrets. Never put them in source code.
 - Page tokens are encrypted at rest. Facebook webhooks are verified with the `X-Hub-Signature-256` signature.
 - Phone numbers and email addresses are masked before any text is sent to an AI model.
 - Outside the `dev` environment, the API refuses to start if `SECRET_KEY` is shorter than 32 characters or `META_APP_SECRET` is missing.

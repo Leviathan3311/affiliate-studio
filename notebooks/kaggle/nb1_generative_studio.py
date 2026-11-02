@@ -43,9 +43,15 @@ from gp_worker import Worker, ffmpeg, probe_duration, secret, video_codec  # noq
 # DRY_RUN=1 renders placeholder media with FFmpeg only: tests the full API/R2 loop without GPUs.
 DRY_RUN = os.environ.get("GP_DRY_RUN", "0") == "1"
 WORKFLOWS = HERE / "workflows" if (HERE / "workflows").is_dir() else HERE  # the dataset is flat
-COMFY = Path("/kaggle/working/ComfyUI")
+# Kaggle defaults; Modal (notebooks/modal/growthpilot.py) bakes ComfyUI and sd-cli into its image.
+ROOT = Path(os.environ.get("GP_ROOT", "/kaggle/working"))
+HF_DIR = os.environ.get("GP_HF_DIR")  # plain files on a Modal Volume instead of the HF cache
+# "split": Kaggle T4 x2, ComfyUI on cuda:0 and H3 on cuda:1 with its text encoder on the CPU.
+# "single": one big GPU (Modal L40S 48 GB) runs everything; ComfyUI unloads before H3.
+GPU_LAYOUT = os.environ.get("GP_GPU_LAYOUT", "split")
+COMFY = ROOT / "ComfyUI"
 GPU_SERVERS = {"image": "http://127.0.0.1:8188", "audio": "http://127.0.0.1:8188"}
-SDCPP = Path("/kaggle/working/stable-diffusion.cpp")
+SDCPP = ROOT / "stable-diffusion.cpp"
 SDCPP_TAG = "master-1031-c6dfa9d"  # first release with MiniMax-H3 I2VA docs; bump deliberately
 SD_CLI = SDCPP / "build/bin/sd-cli"
 
@@ -107,7 +113,7 @@ def build_sdcpp() -> None:
             SD_CLI.unlink()
     if SD_CLI.exists():
         return
-    log_path = Path("/kaggle/working/sdcpp_build.log")
+    log_path = ROOT / "sdcpp_build.log"
     log = log_path.open("w")
 
     def run(*cmd: str) -> None:
@@ -137,6 +143,19 @@ def build_sdcpp() -> None:
     run("cmake", "--build", str(SDCPP / "build"), "--config", "Release", "-j", str(os.cpu_count()), "--target", "sd-cli")
 
 
+def download_models() -> None:
+    from huggingface_hub import hf_hub_download
+
+    for repo, filename, folder in MODELS:
+        target = COMFY / "models" / folder / Path(filename).name
+        if not target.exists():
+            print("downloading", repo, filename, flush=True)
+            where = {"local_dir": f"{HF_DIR}/{repo}"} if HF_DIR else {"cache_dir": "/kaggle/tmp/hf"}
+            path = hf_hub_download(repo, filename, token=secret("HF_TOKEN"), **where)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.symlink(path, target)
+
+
 def setup() -> None:
     builder = ThreadPoolExecutor(1).submit(build_sdcpp)  # overlaps with the model downloads
     if not COMFY.exists():
@@ -145,18 +164,10 @@ def setup() -> None:
                         str(COMFY / "custom_nodes/ComfyUI-GGUF")], check=True)
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(COMFY / "requirements.txt"),
                         "-r", str(COMFY / "custom_nodes/ComfyUI-GGUF/requirements.txt"), "huggingface_hub"], check=True)
-    from huggingface_hub import hf_hub_download
-
-    for repo, filename, folder in MODELS:
-        target = COMFY / "models" / folder / Path(filename).name
-        if not target.exists():
-            print("downloading", repo, filename, flush=True)
-            path = hf_hub_download(repo, filename, token=secret("HF_TOKEN"), cache_dir="/kaggle/tmp/hf")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            os.symlink(path, target)
+    download_models()
     subprocess.Popen([sys.executable, "main.py", "--listen", "127.0.0.1", "--port", "8188", "--disable-auto-launch"],
                      cwd=COMFY, env={**os.environ, "CUDA_VISIBLE_DEVICES": "0"},
-                     stdout=open("/kaggle/working/comfy0.log", "w"), stderr=subprocess.STDOUT)
+                     stdout=open(ROOT / "comfy0.log", "w"), stderr=subprocess.STDOUT)
     for _ in range(180):
         try:
             if requests.get(f"{GPU_SERVERS['image']}/system_stats", timeout=2).ok:
@@ -164,8 +175,8 @@ def setup() -> None:
         except requests.RequestException:
             time.sleep(2)
     else:
-        raise RuntimeError("ComfyUI did not start; see /kaggle/working/comfy0.log")
-    builder.result()  # raises if the sd.cpp build failed; see /kaggle/working/sdcpp_build.log
+        raise RuntimeError(f"ComfyUI did not start; see {ROOT / 'comfy0.log'}")
+    builder.result()  # raises if the sd.cpp build failed; see sdcpp_build.log
 
 
 # %% [markdown]
@@ -270,10 +281,23 @@ def flux_wf(ref: Path | None) -> str:
     return "flux2_klein_ref" if ref else "flux2_klein_t2i"
 
 
+def comfy_unload() -> None:
+    """Free ComfyUI's VRAM so H3 fits next to it on a single GPU."""
+    server = GPU_SERVERS["image"]
+    requests.post(f"{server}/free", json={"unload_models": True, "free_memory": True}, timeout=30).raise_for_status()
+    for _ in range(30):
+        dev = requests.get(f"{server}/system_stats", timeout=10).json()["devices"][0]
+        if dev["vram_free"] > 0.8 * dev["vram_total"]:
+            return
+        time.sleep(2)
+
+
 def h3_clip(prompt: str, image: Path, frames: int, seed: int, out: Path) -> None:
     """MiniMax H3 I2VA with sd-cli (flags from sd.cpp docs/minimax_h3.md and the unsloth model card)."""
     m, avi = COMFY / "models", out.with_suffix(".avi")
     lora = Path(H3_LORA).stem
+    # On the T4 the 17 GB text encoder runs on the CPU and weights page in and out of VRAM.
+    low_vram = ["--backend", "te=cpu", "--offload-to-cpu"] if GPU_LAYOUT == "split" else []
     cmd = [str(SD_CLI), "-M", "vid_gen",
            "--diffusion-model", str(m / "diffusion_models" / H3_MODEL), "--llm", str(m / "text_encoders" / H3_TE),
            "--vae", str(m / "vae/minimax_h3_video_vae_fp16.safetensors"),
@@ -281,8 +305,9 @@ def h3_clip(prompt: str, image: Path, frames: int, seed: int, out: Path) -> None
            "--lora-model-dir", str(m / "loras"), "-p", f"{prompt}<lora:{lora}:1>", "-i", str(image),
            "-W", str(VIDEO_W), "-H", str(VIDEO_H), "--video-frames", str(frames), "--fps", "24",
            "--steps", "8", "--cfg-scale", "1.0", "-s", str(seed), "--rng", "cpu",
-           "--backend", "te=cpu", "--offload-to-cpu", "--mmap", "--diffusion-fa", "--vae-tiling", "-o", str(avi)]
-    res = subprocess.run(cmd, env={**os.environ, "CUDA_VISIBLE_DEVICES": "1"}, capture_output=True, text=True)
+           *low_vram, "--mmap", "--diffusion-fa", "--vae-tiling", "-o", str(avi)]
+    gpu = "1" if GPU_LAYOUT == "split" else "0"
+    res = subprocess.run(cmd, env={**os.environ, "CUDA_VISIBLE_DEVICES": gpu}, capture_output=True, text=True)
     if res.returncode or not avi.exists():
         raise RuntimeError(f"sd-cli MiniMax H3 failed ({res.returncode}): {(res.stdout + res.stderr)[-1500:]}")
     ffmpeg("-i", str(avi), *video_codec(), "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "32000", str(out))
@@ -291,15 +316,22 @@ def h3_clip(prompt: str, image: Path, frames: int, seed: int, out: Path) -> None
 def stage_clips(w: Worker, job: dict, d: Path, master: Path) -> list[Path]:
     clips = []
     shots = job["payload"]["shots"]
+    # Shots after the first start from their own frame (jobs queued before this have none), edited
+    # from the studio master so the same product, person and room carry across shots. All frames
+    # come first so a single GPU unloads FLUX only once.
+    frames = []
     for i, shot in enumerate(shots):
-        w.progress(f"minimax-h3:shot {i + 1}/{len(shots)}", 0.25 + 0.45 * i / len(shots))
-        out = d / f"clip_{i}.mp4"
-        # Shots after the first start from their own frame (jobs queued before this have none),
-        # edited from the studio master so the same product, person and room carry across shots.
         frame = master
         if shot.get("keyframe") and not DRY_RUN:
+            w.progress(f"flux2:keyframe {i + 1}/{len(shots)}", 0.2)
             frame = d / f"frame_{i}.png"
             flux_image("flux2_klein_ref", shot["keyframe"]["prompt"], master, random.randint(0, 2**31 - 1), frame)
+        frames.append(frame)
+    if GPU_LAYOUT == "single" and not DRY_RUN:
+        comfy_unload()
+    for i, (shot, frame) in enumerate(zip(shots, frames, strict=True)):
+        w.progress(f"minimax-h3:shot {i + 1}/{len(shots)}", 0.25 + 0.45 * i / len(shots))
+        out = d / f"clip_{i}.mp4"
         secs = max(2, min(10, round(shot["duration_seconds"])))
         if DRY_RUN:
             ffmpeg("-loop", "1", "-i", str(master), "-f", "lavfi", "-i", f"sine=frequency={300 + 100 * i}:duration={secs}",

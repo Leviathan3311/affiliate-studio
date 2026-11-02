@@ -998,7 +998,7 @@ def chat(project_id: uuid.UUID, body: ChatIn, ctx: Marketing, bg: BackgroundTask
 
 
 @router.post("/projects/{project_id}/generate", response_model=JobOut, status_code=202)
-def generate(project_id: uuid.UUID, body: GenerateIn, ctx: Marketing):
+def generate(project_id: uuid.UUID, body: GenerateIn, ctx: Marketing, bg: BackgroundTasks):
     """Explicit 'Generate ảnh & video' on the selected script only (BRD: never auto-generate)."""
     p = _project(ctx, project_id)
     art = _artifact(ctx, body.script_artifact_id)
@@ -1013,11 +1013,12 @@ def generate(project_id: uuid.UUID, body: GenerateIn, ctx: Marketing):
     )
     ctx.audit("media.generate", "media_job", job.id, script_version=str(version.id))
     ctx.db.commit()
+    bg.add_task(media.wake_worker, "studio")
     return job
 
 
 @router.post("/projects/{project_id}/shorts", response_model=JobOut, status_code=202)
-def make_shorts(project_id: uuid.UUID, body: ShortsIn, ctx: Marketing):
+def make_shorts(project_id: uuid.UUID, body: ShortsIn, ctx: Marketing, bg: BackgroundTasks):
     p = _project(ctx, project_id)
     if body.source_artifact_id:
         art = _artifact(ctx, body.source_artifact_id)
@@ -1042,6 +1043,7 @@ def make_shorts(project_id: uuid.UUID, body: ShortsIn, ctx: Marketing):
     job = media.create_shorts_job(ctx.db, p, obj, ctx.user.id, body.target_count, cta=body.cta)
     ctx.audit("media.shorts", "media_job", job.id, source=str(obj.id))
     ctx.db.commit()
+    bg.add_task(media.wake_worker, "shorts")
     return job
 
 

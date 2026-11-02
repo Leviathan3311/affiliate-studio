@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     # Kaggle media workers authenticate with this token (Kaggle Secret MEDIA_WORKER_TOKEN)
     media_worker_token: str = ""
     media_job_stale_minutes: int = 20
+    # Modal app with the GPU workers (notebooks/modal/growthpilot.py); empty = start Kaggle by hand.
+    # Auth: ~/.modal.toml locally, MODAL_TOKEN_ID / MODAL_TOKEN_SECRET on a server.
+    modal_app: str = ""
 
     # Optional Upstash Redis REST queue filled by the Cloudflare webhook edge gateway at night
     upstash_redis_rest_url: str = ""
