@@ -205,6 +205,10 @@ def test_project_to_kaggle_to_published_post(client, db, spa, gemini):
     for c in [snap["studio_master"], *snap["keyframes"], *snap["shots"]]:
         assert "Product: smooth black basalt stones; Person: a Vietnamese woman" in c["prompt"]
     assert "Setting:" not in snap["shots"][0]["prompt"]  # empty parts are left out
+    # brand text only on the thumbnail; models misspelled it when painted onto every frame
+    assert "Facts to keep" in snap["thumbnail"]["prompt"]
+    for c in [snap["studio_master"], *snap["keyframes"], *snap["shots"]]:
+        assert "Facts to keep" not in c["prompt"] and "No text, letters, logos" in c["prompt"]
 
     # Kaggle notebook 1
     w = {"Authorization": "Bearer worker-secret"}
@@ -470,3 +474,34 @@ def test_script_and_media_assistants_keep_separate_conversations(client, spa, ge
     media_chat = client.get(f"{base}/chat?scope=media", headers=h).json()
     assert [m["content"] for m in script_chat] == ["gộp A với B", "Đang viết"]
     assert [m["content"] for m in media_chat] == ["ảnh ấm hơn", "Làm lại nhé"]
+
+
+def test_script_without_continuity_is_upgraded_before_generating(
+    client, db, spa, gemini, monkeypatch
+):
+    h, p = spa
+    old = {k: v for k, v in SCRIPT.items() if k != "continuity"}
+    seen = []
+
+    def fake(db, *, system, parts, purpose, workspace_id, deep=False, search=False, timeout=None):
+        seen.append(purpose)
+        if purpose == "scripts.generate":
+            return GeminiResult({"variants": [old]}, "gemini-test", [])
+        assert purpose == "scripts.revise"
+        return GeminiResult([SCRIPT], "gemini-test", [])  # Gemini sometimes wraps it in a list
+
+    monkeypatch.setattr(agents, "gemini_json", fake)
+    base = f"/api/v1/projects/{p['id']}"
+    client.post(f"{base}/scripts", headers=h, json={"count": 1})
+    a = client.get(f"{base}/artifacts?kind=script", headers=h).json()[0]
+    assert (
+        "continuity" not in a["current"]["content"]
+        or not a["current"]["content"]["continuity"]["product"]
+    )
+    client.post(f"/api/v1/artifacts/{a['id']}/select", headers=h)
+    job = client.post(f"{base}/generate", headers=h, json={"script_artifact_id": a["id"]}).json()
+
+    assert seen == ["scripts.generate", "scripts.revise"]
+    assert "Product: smooth black basalt stones" in job["prompt_snapshot"]["shots"][0]["prompt"]
+    a = client.get(f"/api/v1/artifacts/{a['id']}", headers=h).json()
+    assert a["current"]["version_number"] == 2 and a["status"] == "selected"

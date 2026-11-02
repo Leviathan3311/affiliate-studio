@@ -997,6 +997,13 @@ def chat(project_id: uuid.UUID, body: ChatIn, ctx: Marketing, bg: BackgroundTask
 # ---------- media generation (Kaggle) ----------
 
 
+CONTINUITY_UPGRADE = (
+    "Thêm continuity (product, talent, setting) theo đúng sản phẩm của kịch bản, rồi viết lại "
+    "visual_prompt và description của mọi shot cho cùng một sản phẩm, cùng người, cùng phòng, "
+    "bỏ mọi đồ hoạ hay hiệu ứng số. Giữ nguyên câu chuyện, hook, cta và lời thoại."
+)
+
+
 @router.post("/projects/{project_id}/generate", response_model=JobOut, status_code=202)
 def generate(project_id: uuid.UUID, body: GenerateIn, ctx: Marketing, bg: BackgroundTasks):
     """Explicit 'Generate ảnh & video' on the selected script only (BRD: never auto-generate)."""
@@ -1008,6 +1015,17 @@ def generate(project_id: uuid.UUID, body: GenerateIn, ctx: Marketing, bg: Backgr
             "Hãy chọn một kịch bản (Chọn bản này) trước khi tạo ảnh/video",
         )
     version = ctx.db.get(ArtifactVersion, art.current_version_id)
+    if not (version.content.get("continuity") or {}).get("product"):
+        # Written before the continuity sheet: each shot would re-imagine the product (an LED mask
+        # became a sheet mask, then a face). Let the writer add the sheet and align every shot.
+        try:
+            revised, model = agents.revise_script(ctx.db, p, version.content, CONTINUITY_UPGRADE)
+        except LLMUnavailable:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "AI đang bận, thử lại sau ít phút"
+            ) from None
+        revised["instruction"] = CONTINUITY_UPGRADE
+        version = _add_version(ctx.db, art, revised, "ai", model=model, user_id=ctx.user.id)
     job = media.create_studio_job(
         ctx.db, p, version, ctx.user.id, body.extra_instruction, body.disable_style
     )

@@ -29,6 +29,7 @@ from app.models import (
 )
 
 MAX_SHOTS = VIDEO_SHOTS
+NO_TEXT = " No text, letters, logos or watermarks anywhere in the frame."
 MAX_SHORTS = 5
 MIME = {
     "png": "image/png",
@@ -93,7 +94,11 @@ def _continuity(script: dict) -> str:
         for k, label in (("product", "Product"), ("talent", "Person"), ("setting", "Setting"))
         if c.get(k, "").strip()
     ]
-    return " Same in every shot. " + "; ".join(parts) + "." if parts else ""
+    if not parts:
+        return ""
+    # A keyframe edited from a master where the product is in hand showed it worn and held at once.
+    one = " Exactly one of this product in the frame." if c.get("product", "").strip() else ""
+    return " Same in every shot. " + "; ".join(parts) + "." + one
 
 
 def create_studio_job(
@@ -111,11 +116,9 @@ def create_studio_job(
         m: resolve_style(db, project.workspace_id, project.id, m)
         for m in ("image", "video", "audio")
     }
-    common = {
-        "brand_facts": facts,
-        "extra_instruction": extra_instruction,
-        "disable_style": disable_style,
-    }
+    # Brand facts only go to the thumbnail, the one picture with text: given to every frame, the
+    # models painted the spa name onto the set and misspelled it.
+    common = {"extra_instruction": extra_instruction, "disable_style": disable_style}
     shots = script["shots"][:MAX_SHOTS]
     first = shots[0]
     same = _continuity(script)
@@ -123,7 +126,7 @@ def create_studio_job(
     master = compose(
         modality="image",
         task="Photoreal studio advertising key visual, vertical 9:16, product kept identical to the "
-        "reference photo with the background re-staged.",
+        f"reference photo with the background re-staged.{NO_TEXT}",
         subject=first["visual_prompt"] + same,
         references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
         style=styles["image"],
@@ -136,6 +139,7 @@ def create_studio_job(
         subject=first["visual_prompt"] + same,
         references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
         style=styles["image"],
+        brand_facts=facts,
         **common,
     )
     # Each shot after the first starts from its own FLUX frame: animating the key visual into a
@@ -146,7 +150,7 @@ def create_studio_job(
             modality="image",
             task="Photoreal first frame of the next shot of the same vertical 9:16 spa video ad. "
             "Keep the product, the person and the room of the reference image; change only the "
-            "camera framing and the action.",
+            f"camera framing and the action.{NO_TEXT}",
             subject=s["visual_prompt"] + same,
             references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
             style=styles["image"],
@@ -157,7 +161,7 @@ def create_studio_job(
     clips = [
         compose(
             modality="video",
-            task="Image-to-video with synchronized audio (SFX, ambience, voice if any), 9:16.",
+            task=f"Image-to-video with synchronized audio (SFX, ambience, voice if any), 9:16.{NO_TEXT}",
             # English only: the Vietnamese description adds nothing the video model can read.
             subject=f"{s['visual_prompt']}. Motion: {s['motion'] or 'slow push-in'}. "
             f"Sound: {s['sfx'] or 'soft spa ambience'}.{same}",

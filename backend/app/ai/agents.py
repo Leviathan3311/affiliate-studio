@@ -298,12 +298,17 @@ nạ phát sáng trên mặt → tháo ra, da mặt rạng rỡ), không nhảy 
 - continuity (tiếng Anh) viết TRƯỚC các shot: product = hình dáng, màu, chất liệu của sản phẩm thật \
 theo tài liệu và cách dùng trên cơ thể (ví dụ "a flexible white silicone full-face LED mask with eye \
 openings, worn over the face, glowing teal-green light from the inside"); talent = khách trên hình \
-(tuổi, ngoại hình, tóc, trang phục); setting = phòng, đạo cụ, ánh sáng, tông màu.
+(tuổi, ngoại hình, tóc, trang phục); setting = phòng, đạo cụ, ánh sáng, tông màu (không ghi tên spa hay \
+chữ nào: model sẽ vẽ chữ đó lên hình và viết sai).
 - visual_prompt (tiếng Anh) của MỖI shot: gọi sản phẩm và người bằng đúng cụm từ trong continuity, \
 nói rõ sản phẩm đang ở đâu (trên mặt, trên khay, trong tay), cỡ cảnh (close-up, medium, wide) và việc \
 đang diễn ra. Không bao giờ thay sản phẩm bằng thiết bị khác (ví dụ mặt nạ thì không thành máy cầm \
 tay), không đặt sản phẩm lên vùng cơ thể mà nó không dùng cho. KHÔNG nhắc phong cách chung (hệ thống tự \
 ghép Style Pack).
+- Chỉ tả thứ máy quay quay được thật trong phòng: KHÔNG đồ hoạ hay hiệu ứng số (tia sáng quét, sóng \
+ánh sáng, sơ đồ, cấu trúc collagen, hologram), không chia đôi màn hình, không chữ hay logo trong hình. \
+Công dụng thể hiện qua người thật dùng sản phẩm thật (ví dụ mặt nạ phát sáng trên mặt khách đang nằm thư \
+giãn), không vẽ cơ chế bên trong da.
 - description (tiếng Việt) kể đúng cảnh đó, khớp với visual_prompt.
 - motion: chuyển động máy quay/chủ thể bằng tiếng Anh, nối được với shot sau. music_mood: tag nhạc nền \
 tiếng Anh. caption/hook/cta/on_screen_text: tiếng Việt."""
@@ -373,9 +378,11 @@ def revise_script(
     system = f"""Bạn chỉnh sửa MỘT kịch bản quảng cáo theo yêu cầu, giữ nguyên những phần không được \
 yêu cầu đổi. {SCRIPT_RULES}
 {GUARDRAILS}
-Trả JSON đúng schema của kịch bản (title, angle, insight, hook, key_message, cta, duration_seconds,
-voiceover, music_mood, caption, hashtags, continuity, shots). Sửa một shot thì giữ nguyên continuity, \
-trừ khi được yêu cầu đổi sản phẩm, người hoặc bối cảnh; đổi continuity thì sửa mọi shot cho khớp."""
+Trả MỘT object JSON (không phải mảng) đúng schema của kịch bản: {{"title","angle","insight","hook",
+"key_message","cta","duration_seconds","voiceover","music_mood","caption","hashtags":[],
+"continuity":{{"product","talent","setting"}},
+"shots":[{{"description","visual_prompt","motion","on_screen_text","sfx","duration_seconds"}}]}}.
+Sửa một shot thì giữ nguyên continuity, trừ khi được yêu cầu đổi sản phẩm, người hoặc bối cảnh; đổi continuity thì sửa mọi shot cho khớp."""
     clean = {k: v for k, v in script.items() if k != "flags"}
     res = gemini_json(
         db,
@@ -389,7 +396,10 @@ trừ khi được yêu cầu đổi sản phẩm, người hoặc bối cảnh;
         workspace_id=project.workspace_id,
         timeout=90,
     )
-    d = ScriptVariant.model_validate(res.data).model_dump()
+    data = res.data
+    if isinstance(data, list) and len(data) == 1:  # Gemini sometimes wraps the one script in a list
+        data = data[0]
+    d = ScriptVariant.model_validate(data).model_dump()
     d["flags"] = _script_flags(db, project, d)
     return d, res.model
 
