@@ -301,6 +301,9 @@ export interface Shot {
   motion: string;
   on_screen_text: string;
   voiceover?: string;
+  framing?: string;
+  transition?: string;
+  stat?: string;
   sfx: string;
   duration_seconds: number;
 }
@@ -317,7 +320,7 @@ export interface Script {
   music_mood: string;
   caption: string;
   hashtags: string[];
-  continuity?: { product: string; talent: string; setting: string };
+  continuity?: { product: string; talent: string; setting: string; motif?: string };
   shots: Shot[];
   flags?: string[];
   instruction?: string;

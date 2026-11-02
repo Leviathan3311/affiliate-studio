@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai import speech
-from app.ai.agents import VIDEO_SHOTS, brand_facts
+from app.ai.agents import FRAMINGS, VIDEO_SHOTS, brand_facts
 from app.core import storage
 from app.core.config import get_settings
 from app.core.db import utcnow
@@ -88,20 +88,36 @@ def _references(db: Session, project: Project, roles: tuple[str, ...]) -> list[d
     ]
 
 
-def _continuity(script: dict) -> str:
+def _continuity(script: dict, with_product: bool = True) -> str:
     """The script's fixed product, person and room, appended to every shot so each separately
     generated frame shows the same ones (scripts written before this have none)."""
     c = script.get("continuity") or {}
+    # "when shown": forcing the product into every frame put the mask on a woman who was only
+    # looking in a mirror, and turned the mirror into a second mask.
+    labels = (
+        ("product", "Product (only where this shot shows it)"),
+        ("talent", "Person"),
+        ("setting", "Setting"),
+    )
     parts = [
         f"{label}: {c[k].strip()}"
-        for k, label in (("product", "Product"), ("talent", "Person"), ("setting", "Setting"))
-        if c.get(k, "").strip()
+        for k, label in labels
+        if c.get(k, "").strip() and (with_product or k != "product")
     ]
     if not parts:
         return ""
     # A keyframe edited from a master where the product is in hand showed it worn and held at once.
-    one = " Exactly one of this product in the frame." if c.get("product", "").strip() else ""
-    return " Same in every shot. " + "; ".join(parts) + "." + one
+    one = (
+        " Never more than one of this product in the frame." if c.get("product", "").strip() else ""
+    )
+    if not with_product:
+        one = " The product is not in this shot; hands hold only what the shot describes."
+    motif = f" Recurring motif: {c['motif'].strip()}." if c.get("motif", "").strip() else ""
+    return " Same in every shot. " + "; ".join(parts) + "." + one + motif
+
+
+def _camera(shot: dict) -> str:
+    return f"Camera: {FRAMINGS.get(shot.get('framing', ''), 'Medium shot')}. "
 
 
 def create_studio_job(
@@ -124,12 +140,21 @@ def create_studio_job(
     shots = script["shots"][:MAX_SHOTS]
     first = shots[0]
     same = _continuity(script)
+    # The key visual is a product hero of its own, not shot 1: an opening shot about the problem
+    # (no product yet) was drawn with the product forced in. Every shot gets its own first frame.
+    c = script.get("continuity") or {}
+    hero = (
+        f"Camera: Medium shot. {c['talent']} holds {c['product']} at chest height and looks at it "
+        f"with a soft smile, in {c.get('setting') or 'a calm spa room'}."
+        if c.get("product") and c.get("talent")
+        else _camera(first) + first["visual_prompt"]
+    )
 
     master = compose(
         modality="image",
         task="Photoreal studio advertising key visual, vertical 9:16, product kept identical to the "
         f"reference photo with the background re-staged.{NO_TEXT}",
-        subject=first["visual_prompt"] + same,
+        subject=hero + same,
         references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
         style=styles["image"],
         **common,
@@ -138,34 +163,50 @@ def create_studio_job(
         modality="image",
         task="Vertical 9:16 Facebook thumbnail/banner. Keep the upper third a calm, plain background "
         f"for a headline that is added afterwards.{NO_TEXT}",
-        subject=first["visual_prompt"] + same,
+        subject=hero + same,
         references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
         style=styles["image"],
         **common,
     )
-    # Each shot after the first starts from its own FLUX frame: animating the key visual into a
-    # different scene made H3 morph it (a face mask landed on a skin close-up of shot 1). The
-    # notebook passes the studio master as the reference image, so person, product and room carry.
+    # Shots without the product start from a plate: the master with the product edited out, so
+    # the same woman and room carry without FLUX keeping the mask from the reference (a hand
+    # mirror came out as a second mask).
+    plate = None
+    if any(not s.get("shows_product", True) for s in shots):
+        plate = compose(
+            modality="image",
+            task="Edit the reference image: remove the product completely, her hands rest empty in "
+            "her lap; keep the same person, pose, clothes, light and room unchanged." + NO_TEXT,
+            subject=_continuity(script, with_product=False).strip(),
+            style=styles["image"],
+            **common,
+        )
+    # Each shot starts from its own FLUX frame: animating the key visual into a different scene
+    # made H3 morph it (a face mask landed on a skin close-up of shot 1). The notebook passes the
+    # studio master as the reference image, so person, product and room carry.
     keyframes = [
         compose(
             modality="image",
-            task="Photoreal first frame of the next shot of the same vertical 9:16 spa video ad. "
+            task="Photoreal first frame of one shot of the same vertical 9:16 spa video ad. "
             "Same person, room and product design as the reference image, but the product is only "
             f"where this shot puts it; new camera framing and action.{NO_TEXT}",
-            subject=s["visual_prompt"] + same,
+            subject=_camera(s)
+            + s["visual_prompt"]
+            + _continuity(script, s.get("shows_product", True)),
             references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
             style=styles["image"],
             **common,
         )
-        for s in shots[1:]
+        for s in shots
     ]
     clips = [
         compose(
             modality="video",
             task=f"Image-to-video with synchronized audio (SFX, ambience, voice if any), 9:16.{NO_TEXT_VIDEO}",
             # English only: the Vietnamese description adds nothing the video model can read.
-            subject=f"{s['visual_prompt']}. Motion: {s['motion'] or 'slow push-in'}. "
-            f"Sound: {s['sfx'] or 'soft spa ambience'}.{same}",
+            subject=f"{_camera(s)}{s['visual_prompt']}. Motion: {s['motion'] or 'slow push-in'}. "
+            f"Sound: {s['sfx'] or 'soft spa ambience'}."
+            f"{_continuity(script, s.get('shows_product', True))}",
             style=styles["video"],
             **common,
         )
@@ -209,6 +250,7 @@ def create_studio_job(
         "aspect_ratio": "9:16",
         "references": refs,
         "studio_master": {"prompt": master.prompt, "model": master.model},
+        "plate": {"prompt": plate.prompt, "model": plate.model} if plate else None,
         "thumbnail": {
             "prompt": thumbnail.prompt,
             "model": thumbnail.model,
@@ -220,15 +262,22 @@ def create_studio_job(
                 "negative_prompt": c.negative_prompt,
                 "duration_seconds": s["duration_seconds"],
                 "on_screen_text": s.get("on_screen_text", ""),
+                "highlight": s.get("highlight", ""),
+                "stat": s.get("stat", ""),
+                "transition": s.get("transition", "cut"),
                 "voiceover": s.get("voiceover", ""),
                 "model": c.model,
-                # None for the first shot: it starts from the studio master
-                "keyframe": {"prompt": k.prompt, "model": k.model} if k else None,
+                "keyframe": {
+                    "prompt": k.prompt,
+                    "model": k.model,
+                    "base": "master" if s.get("shows_product", True) else "plate",
+                },
             }
-            for c, s, k in zip(clips, shots, [None, *keyframes], strict=True)
+            for c, s, k in zip(clips, shots, keyframes, strict=True)
         ],
         "bgm": {"prompt": bgm.prompt, "duration_seconds": duration, "model": bgm.model},
-        "mix": {"bgm_volume": 0.25},
+        # accent: the highlighted word and the stat cards (champagne gold of the default style)
+        "mix": {"bgm_volume": 0.25, "accent": "#E9C77B"},
         "shorts": [{"shots": plan} for plan in shorts],
     }
     if any(s["voiceover"] for s in job.payload["shots"]):

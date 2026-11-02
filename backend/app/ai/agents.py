@@ -8,7 +8,7 @@ import base64
 import json
 from typing import Literal
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -248,14 +248,47 @@ def run_research(db: Session, project: Project, mode: str) -> tuple[dict, str]:
 # --- Script/Concept Agent: Kịch bản A/B/C ---
 
 
+# Camera grammar per shot: neighbouring shots differ, so one product, person and room still give a
+# varied ad. Values are the English camera words the image and video models read.
+FRAMINGS = {
+    "macro": "Extreme macro close-up",
+    "close_up": "Close-up",
+    "medium": "Medium shot",
+    "wide": "Wide establishing shot",
+    "top_down": "Top-down overhead shot",
+    "mirror": "Shot reflected in a mirror",
+    "low_angle": "Low-angle shot looking up",
+    "over_shoulder": "Over-the-shoulder shot",
+}
+Framing = Literal[
+    "macro", "close_up", "medium", "wide", "top_down", "mirror", "low_angle", "over_shoulder"
+]
+# How this shot hands over to the next one; "match" is a hard cut on the motif
+Transition = Literal["cut", "match", "flash", "dissolve"]
+
+
 class Shot(BaseModel):
     description: str
     visual_prompt: str
+    framing: Framing = "medium"
+    shows_product: bool = True  # False: the frame is made from a plate with the product removed
     motion: str = ""
     on_screen_text: str = ""
+    highlight: str = ""  # the word of on_screen_text drawn in the accent colour
+    stat: str = ""  # optional big callout card, e.g. "505nm" or "10 phút"
     voiceover: str = ""  # spoken Vietnamese line for this shot (Gemini TTS)
     sfx: str = ""
+    transition: Transition = "cut"
     duration_seconds: float = Field(default=4, ge=1, le=15)
+
+    @field_validator("framing", "transition", mode="before")
+    @classmethod
+    def _known(cls, v, info):
+        allowed = (
+            FRAMINGS if info.field_name == "framing" else ("cut", "match", "flash", "dissolve")
+        )
+        v = str(v or "").strip().lower().replace("-", "_").replace(" ", "_")
+        return v if v in allowed else ("medium" if info.field_name == "framing" else "cut")
 
 
 class Continuity(BaseModel):
@@ -265,6 +298,7 @@ class Continuity(BaseModel):
     product: str = ""  # exact look of the product and how it is used, e.g. worn on the face
     talent: str = ""  # the customer on screen: age, look, hair, clothing
     setting: str = ""  # the room, props, light and colours
+    motif: str = ""  # one recurring visual from the product that links the shots (match cuts)
 
 
 class ScriptVariant(BaseModel):
@@ -314,13 +348,27 @@ Công dụng thể hiện qua người thật dùng sản phẩm thật (ví d�
 giãn), không vẽ cơ chế bên trong da.
 - Mỗi shot MỘT hành động đơn giản, chậm, tay ít chạm sản phẩm. Không quay lúc đang đeo vào hay đang \
 tháo ra (model video vẽ thêm dây, thêm tay, thêm sản phẩm); quay trạng thái trước hoặc sau: mặt nạ đã \
-nằm trên mặt, hoặc đã nằm yên trong tay/trên khay. Mỗi khung chỉ có MỘT sản phẩm. Shot 1 cũng là ảnh \
-chính của quảng cáo nên sản phẩm phải nằm rõ trong khung (ví dụ khách cầm sản phẩm). Shot cuối không \
-"reveal" logo hay màn hình kết, sfx không dùng "jingle": model video sẽ tự vẽ chữ sai.
+nằm trên mặt, hoặc đã nằm yên trong tay/trên khay. Mỗi khung chỉ có MỘT sản phẩm. Shot không có sản \
+phẩm (ví dụ shot mở đầu về nỗi lo) thì shows_product=false, visual_prompt KHÔNG nhắc tới sản phẩm, và mọi \
+đồ vật khác (gương, khăn) tả rõ hình dạng của nó; các shot còn lại shows_product=true. Shot cuối không "reveal" logo hay màn hình kết, sfx không dùng "jingle": \
+model video sẽ tự vẽ chữ sai.
 - description (tiếng Việt) kể đúng cảnh đó, khớp với visual_prompt.
 - voiceover (tiếng Việt): câu thuyết minh của shot đó, đọc thong thả vừa trong thời lượng shot (khoảng \
 3 tiếng mỗi giây: shot 6 giây tối đa 18 tiếng), viết số bằng chữ khi đọc tự nhiên hơn. on_screen_text: tối \
 đa 8 chữ, ý chính của shot (được chèn lên hình bằng font thật).
+- Đa dạng mà vẫn liền mạch (giống phim quảng cáo thật, không phải 5 cảnh cùng một góc):
+  - framing của mỗi shot chọn một trong: macro (cận cực sát chi tiết sản phẩm: đèn LED, chất liệu), \
+close_up, medium, wide (toàn cảnh căn phòng), top_down (từ trên xuống mặt bàn/khay), mirror (qua gương), \
+low_angle, over_shoulder. Hai shot liền nhau KHÔNG cùng framing; có ít nhất một macro sản phẩm và một \
+wide. visual_prompt mở đầu bằng đúng cỡ cảnh đó.
+  - continuity.motif (tiếng Anh): MỘT hình ảnh lấy từ chính sản phẩm, lặp lại ở ít nhất 3 shot để nối \
+các cảnh (ví dụ "the soft teal-green glow of the mask's LEDs": phản chiếu trong gương, sáng trong mặt \
+nạ, hắt lên da, tắt dần trên bàn). Ghi motif vào visual_prompt của các shot có nó.
+  - transition (từ shot này sang shot sau): match (khung cuối shot này và khung đầu shot sau cùng một \
+hình/motif, motion phải kết thúc đúng ở đó), flash (lóe sáng theo motif), dissolve (tan mềm, cho nhịp \
+chậm), cut. Dùng ít nhất 2 kiểu khác nhau; shot cuối để cut.
+  - highlight: một từ trong on_screen_text được tô màu nhấn. stat: thẻ số liệu lớn, tối đa 2 shot có, \
+chỉ số có trong tài liệu (ví dụ "505nm", "10 phút"), để trống nếu không có.
 - motion: chuyển động máy quay/chủ thể bằng tiếng Anh, nối được với shot sau. music_mood: tag nhạc nền \
 tiếng Anh. caption/hook/cta/on_screen_text/voiceover: tiếng Việt."""
 
@@ -337,6 +385,7 @@ def _script_flags(db: Session, project: Project, variant: dict) -> list[str]:
         ]
         + [s["on_screen_text"] for s in variant["shots"]]
         + [s.get("voiceover", "") for s in variant["shots"]]
+        + [s.get("stat", "") for s in variant["shots"]]
     )
     return ["unverified_price"] if extract_prices(text) - allowed else []
 
@@ -350,8 +399,9 @@ nhau rõ rệt về góc tiếp cận (ví dụ: giải quyết nỗi lo, ưu đ
 {GUARDRAILS}
 Nếu không có research report, ghi rõ trong "insight" rằng đây là giả định.
 Trả JSON: {{"variants":[{{"title","angle","insight","hook","key_message","cta","duration_seconds",
-"voiceover","music_mood","caption","hashtags":[],"continuity":{{"product","talent","setting"}},
-"shots":[{{"description","visual_prompt","motion","on_screen_text","voiceover","sfx","duration_seconds"}}]}}]}}"""
+"voiceover","music_mood","caption","hashtags":[],"continuity":{{"product","talent","setting","motif"}},
+"shots":[{{"description","visual_prompt","framing","shows_product","motion","on_screen_text","highlight","stat","voiceover","sfx",
+"transition","duration_seconds"}}]}}]}}"""
     parts = [{"text": project_brief(db, project)}]
     if research:
         slim = {
@@ -392,8 +442,9 @@ yêu cầu đổi. {SCRIPT_RULES}
 {GUARDRAILS}
 Trả MỘT object JSON (không phải mảng) đúng schema của kịch bản: {{"title","angle","insight","hook",
 "key_message","cta","duration_seconds","voiceover","music_mood","caption","hashtags":[],
-"continuity":{{"product","talent","setting"}},
-"shots":[{{"description","visual_prompt","motion","on_screen_text","voiceover","sfx","duration_seconds"}}]}}.
+"continuity":{{"product","talent","setting","motif"}},
+"shots":[{{"description","visual_prompt","framing","shows_product","motion","on_screen_text","highlight","stat","voiceover",
+"sfx","transition","duration_seconds"}}]}}.
 Sửa một shot thì giữ nguyên continuity, trừ khi được yêu cầu đổi sản phẩm, người hoặc bối cảnh; đổi continuity thì sửa mọi shot cho khớp."""
     clean = {k: v for k, v in script.items() if k != "flags"}
     res = gemini_json(

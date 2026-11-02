@@ -75,4 +75,5 @@ def studio() -> None:
     nb1 = _nb1()
     worker = nb1.Worker(["studio"])
     nb1.setup()
-    worker.run(nb1.handle, max_idle_minutes=float(os.environ.get("GP_MAX_IDLE_MIN", "2")))
+    if worker.run(nb1.handle, max_idle_minutes=float(os.environ.get("GP_MAX_IDLE_MIN", "2"))) == "gpu_lost":
+        studio.spawn()  # runs on a fresh machine once this container has exited (max_containers=1)

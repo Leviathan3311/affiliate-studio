@@ -7,6 +7,9 @@ import { ARTIFACT_STATUS, FLAG } from "@/lib/format";
 import type { Artifact, EffectiveStyle, Project, Script } from "@/lib/types";
 import { statusTone } from "./library";
 
+const FRAMING: Record<string, string> = { macro: "Cận cực sát", close_up: "Cận cảnh", medium: "Trung cảnh", wide: "Toàn cảnh", top_down: "Từ trên xuống", mirror: "Qua gương", low_angle: "Góc thấp", over_shoulder: "Qua vai" };
+const TRANSITION: Record<string, string> = { match: "→ nối khớp hình", flash: "→ lóe sáng", dissolve: "→ tan mềm" };
+
 export function ScriptView({
   a,
   project,
@@ -63,7 +66,7 @@ export function ScriptView({
           <h3 className="mt-7 text-sm font-semibold">Giữ giống nhau ở mọi cảnh</h3>
           <p className="mt-1 text-xs text-faint">AI tạo hình đọc phần này (tiếng Anh) để mọi cảnh có cùng sản phẩm, cùng người, cùng căn phòng.</p>
           <dl className="mt-3 grid gap-4 sm:grid-cols-3">
-            {([["Sản phẩm", s.continuity.product], ["Người trên hình", s.continuity.talent], ["Bối cảnh", s.continuity.setting]] as const).map(([k, v]) => (
+            {([["Sản phẩm", s.continuity.product], ["Người trên hình", s.continuity.talent], ["Bối cảnh", s.continuity.setting], ["Hình nối các cảnh", s.continuity.motif ?? ""]] as const).filter(([, v]) => v).map(([k, v]) => (
               <div key={k}>
                 <dt className="text-xs text-faint">{k}</dt>
                 <dd className="mt-1 text-sm leading-relaxed">{v || "—"}</dd>
@@ -89,7 +92,7 @@ export function ScriptView({
             {s.shots.map((shot, i) => (
               <tr key={i} className="border-t border-rule align-top">
                 <td className="py-2 text-muted">{i + 1}</td>
-                <td className="py-2.5 pr-3">{shot.description}<p className="text-xs text-faint">{shot.motion}</p></td>
+                <td className="py-2.5 pr-3">{shot.description}<p className="text-xs text-faint">{[FRAMING[shot.framing ?? ""], shot.motion, TRANSITION[shot.transition ?? ""]].filter(Boolean).join(" · ")}</p>{shot.stat && <p className="mt-1 text-xs font-semibold text-accent">Thẻ số liệu: {shot.stat}</p>}</td>
                 <td className="py-2 pr-3">{shot.voiceover || "—"}</td>
                 <td className="py-2 pr-3">{shot.on_screen_text || "—"}</td>
                 <td className="py-2 pr-3">{shot.sfx || "—"}</td>

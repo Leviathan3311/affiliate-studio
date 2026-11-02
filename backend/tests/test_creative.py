@@ -200,10 +200,16 @@ def test_project_to_kaggle_to_published_post(client, db, spa, gemini):
     snap = job["prompt_snapshot"]
     assert snap["styles"]["image"]["pack_name"] == "Luxury Beige Spa"  # platform preset default
     assert "Keep it unchanged" in snap["studio_master"]["prompt"]  # preserved product reference
+    # the key visual is a product hero, not shot 1 (which may be about the problem, without it)
+    assert "holds smooth black basalt stones" in snap["studio_master"]["prompt"]
+    assert SCRIPT["shots"][0]["visual_prompt"] not in snap["studio_master"]["prompt"]
     assert len(snap["shots"]) == 2
     # one product, person and room in every separately generated frame and clip
     for c in [snap["studio_master"], *snap["keyframes"], *snap["shots"]]:
-        assert "Product: smooth black basalt stones; Person: a Vietnamese woman" in c["prompt"]
+        assert (
+            "Product (only where this shot shows it): smooth black basalt stones; "
+            "Person: a Vietnamese woman" in c["prompt"]
+        )
     assert "Setting:" not in snap["shots"][0]["prompt"]  # empty parts are left out
     # models misspell painted text: no brand facts in any picture, the headline is drawn later
     for c in [snap["studio_master"], snap["thumbnail"], *snap["keyframes"], *snap["shots"]]:
@@ -222,9 +228,9 @@ def test_project_to_kaggle_to_published_post(client, db, spa, gemini):
     ).json()["job"]
     assert claimed["payload"]["references"][0]["url"]
     assert claimed["payload"]["thumbnail"]["headline"] == SCRIPT["hook"]  # drawn by the notebook
-    # shot 1 animates the studio master; later shots get their own first frame
+    # every shot gets its own first frame, edited from the product hero (the studio master)
     first, second = claimed["payload"]["shots"]
-    assert first["keyframe"] is None
+    assert "Same person, room and product design" in first["keyframe"]["prompt"]
     assert "Keep it unchanged" in second["keyframe"]["prompt"]
     for up in claimed["uploads"].values():
         put_presigned(client, up["url"], b"x" * 10, up["content_type"])
@@ -502,7 +508,7 @@ def test_script_without_continuity_is_upgraded_before_generating(
     job = client.post(f"{base}/generate", headers=h, json={"script_artifact_id": a["id"]}).json()
 
     assert seen == ["scripts.generate", "scripts.revise"]
-    assert "Product: smooth black basalt stones" in job["prompt_snapshot"]["shots"][0]["prompt"]
+    assert "smooth black basalt stones" in job["prompt_snapshot"]["shots"][0]["prompt"]
     a = client.get(f"/api/v1/artifacts/{a['id']}", headers=h).json()
     assert a["current"]["version_number"] == 2 and a["status"] == "selected"
 
@@ -593,3 +599,46 @@ def test_five_shot_ad_gets_one_short_per_benefit(client, db, spa, gemini, monkey
     assert done == {"status": "succeeded", "missing": []}
     shorts = client.get(f"{base}/artifacts?kind=short", headers=h).json()
     assert {s["status"] for s in shorts} == {"ready"}
+
+
+def test_shot_camera_grammar_is_normalised_and_reaches_the_prompts():
+    from app.ai.agents import Shot
+    from app.creative.media import _camera, _continuity
+
+    s = Shot.model_validate(
+        {"description": "", "visual_prompt": "x", "framing": "Close-Up", "transition": "whip"}
+    )
+    assert (s.framing, s.transition) == ("close_up", "cut")  # unknown values fall back, never fail
+    assert _camera(s.model_dump()) == "Camera: Close-up. "
+    script = {"continuity": {"product": "a white LED mask", "motif": "the teal-green glow"}}
+    assert "Recurring motif: the teal-green glow." in _continuity(script)
+
+
+def test_shot_without_the_product_starts_from_a_plate(client, db, spa, gemini, monkeypatch):
+    first = {**SCRIPT["shots"][0], "shows_product": False, "visual_prompt": "she looks in a mirror"}
+    script = {**SCRIPT, "shots": [first, SCRIPT["shots"][1]]}
+    real = agents.gemini_json
+
+    def fake(db, **kw):
+        if kw["purpose"] == "scripts.generate":
+            return GeminiResult({"variants": [script]}, "gemini-test", [])
+        return real(db, **kw)
+
+    monkeypatch.setattr(agents, "gemini_json", fake)
+    h, p = spa
+    base = f"/api/v1/projects/{p['id']}"
+    client.post(f"{base}/scripts", headers=h, json={"count": 1})
+    a = client.get(f"{base}/artifacts?kind=script", headers=h).json()[0]
+    client.post(f"/api/v1/artifacts/{a['id']}/select", headers=h)
+    client.post(f"{base}/generate", headers=h, json={"script_artifact_id": a["id"]})
+    job = client.post(
+        "/api/v1/worker/jobs/claim",
+        headers={"Authorization": "Bearer worker-secret"},
+        json={"worker_id": "nb1", "kinds": ["studio"]},
+    ).json()["job"]
+    plate, (no, yes) = job["payload"]["plate"], job["payload"]["shots"]
+    assert "remove the product" in plate["prompt"] and "basalt" not in plate["prompt"]
+    assert no["keyframe"]["base"] == "plate" and yes["keyframe"]["base"] == "master"
+    for prompt in (no["keyframe"]["prompt"], no["prompt"]):  # neither the frame nor the clip
+        assert "basalt" not in prompt and "The product is not in this shot" in prompt
+    assert "basalt" in yes["prompt"]

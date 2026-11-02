@@ -39,6 +39,11 @@ class Cancelled(Exception):
     pass
 
 
+# The GPU itself broke (Modal log: "Xid 79, GPU has fallen off the bus"): every later job on this
+# machine fails the same way, so give the job back and stop instead of burning its retries.
+GPU_LOST = ("cudaErrorUnknown", "CUDA error: unknown error", "fallen off the bus", "illegal memory access")
+
+
 class Worker:
     def __init__(self, kinds: list[str], workdir: str = "/kaggle/working/gp"):
         api_url, token = secret("GP_API_URL"), secret("MEDIA_WORKER_TOKEN")
@@ -60,10 +65,19 @@ class Worker:
         self._cancelled = False
 
     # --- API ---
-    def _post(self, path: str, body: dict) -> dict:
-        r = requests.post(f"{self.api}{path}", json=body, headers=self.headers, timeout=60)
-        r.raise_for_status()
-        return r.json()
+    def _post(self, path: str, body: dict, tries: int = 1) -> dict:
+        """tries > 1 for results: a tunnel blip (HTTP 530) once threw away a finished video."""
+        for attempt in range(tries):
+            try:
+                r = requests.post(f"{self.api}{path}", json=body, headers=self.headers, timeout=60)
+                r.raise_for_status()
+                return r.json()
+            except requests.RequestException as e:
+                if attempt == tries - 1:
+                    raise
+                print(f"{path} failed ({e}); retrying", flush=True)
+                time.sleep(min(60, 5 * 2**attempt))
+        raise AssertionError("unreachable")
 
     def claim(self) -> dict | None:
         return self._post("/jobs/claim", {"worker_id": self.worker_id, "kinds": self.kinds})["job"]
@@ -100,8 +114,9 @@ class Worker:
         r.raise_for_status()
 
     # --- loop ---
-    def run(self, handler, poll_seconds: int = 20, max_idle_minutes: float = 60) -> None:
-        """handler(worker, job, workdir) -> {output name: metadata}. Uploads happen inside it."""
+    def run(self, handler, poll_seconds: int = 20, max_idle_minutes: float = 60) -> str:
+        """handler(worker, job, workdir) -> {output name: metadata}. Uploads happen inside it.
+        Returns "idle", or "gpu_lost" after a GPU fault so the host can start a fresh machine."""
         idle_since = time.time()
         while True:
             try:
@@ -112,7 +127,7 @@ class Worker:
             if self.job is None:
                 if time.time() - idle_since > max_idle_minutes * 60:
                     print("idle, stopping to save GPU quota", flush=True)
-                    return
+                    return "idle"
                 time.sleep(poll_seconds)
                 continue
             idle_since = time.time()
@@ -123,18 +138,23 @@ class Worker:
             threading.Thread(target=self._heartbeat, args=(stop,), daemon=True).start()
             try:
                 outputs = handler(self, self.job, jobdir)
-                res = self._post(f"/jobs/{self.job['id']}/complete", {"outputs": outputs})
+                res = self._post(f"/jobs/{self.job['id']}/complete", {"outputs": outputs}, tries=8)  # ~6 min
                 print("completed:", res, flush=True)
             except Cancelled:
                 print("cancelled by user", flush=True)
             except Exception as e:
                 traceback.print_exc()
                 oom = "out of memory" in str(e).lower()
+                # sd-cli only aborts (-6) with a backtrace, so its GPU fault shows up in ComfyUI next
+                lost = any(m in str(e) for m in GPU_LOST) or "sd-cli MiniMax H3 failed (-6)" in str(e)
                 try:
                     self._post(f"/jobs/{self.job['id']}/fail",
-                               {"error": f"{type(e).__name__}: {e}"[:3900], "retryable": not oom})
+                               {"error": f"{type(e).__name__}: {e}"[:3900], "retryable": not oom}, tries=4)
                 except requests.RequestException:
                     pass
+                if lost:
+                    print("GPU fault: giving the job back and stopping this machine", flush=True)
+                    return "gpu_lost"
             finally:
                 stop.set()
                 shutil.rmtree(jobdir, ignore_errors=True)  # /kaggle/working is small

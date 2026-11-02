@@ -282,31 +282,69 @@ def stage_images(w: Worker, job: dict, d: Path) -> tuple[Path, Path]:
 FONT_URL = "https://github.com/google/fonts/raw/main/ofl/bevietnampro/BeVietnamPro-Bold.ttf"
 
 
-def text_layer(text: str, size: int):
-    """Transparent W x H layer with the text centred and wrapped in the upper part, in a real
-    Vietnamese font: FLUX misspells Vietnamese diacritics ("Kiểh hagi lân da")."""
-    from PIL import Image, ImageDraw, ImageFont
+def _font(size: int):
+    from PIL import ImageFont
 
     font_file = ROOT / "BeVietnamPro-Bold.ttf"
     if not font_file.exists():
         r = requests.get(FONT_URL, timeout=60)
         r.raise_for_status()
         font_file.write_bytes(r.content)
-    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(layer)
-    font = ImageFont.truetype(str(font_file), size)
+    return ImageFont.truetype(str(font_file), size)
+
+
+def text_lines(text: str, size: int, top: float, highlight: str = "", accent: str = "#E9C77B") -> list:
+    """One transparent W x H layer per wrapped line, centred from `top` (a share of H), in a real
+    Vietnamese font (FLUX misspells diacritics: "Kiểh hagi lân da"). The `highlight` word is drawn
+    in the accent colour. Separate layers let each line come in on its own beat."""
+    from PIL import Image, ImageDraw
+
+    font = _font(size)
+    measure = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     lines = [""]
     for word in text.split():
         trial = f"{lines[-1]} {word}".strip()
-        if lines[-1] and draw.textlength(trial, font=font) > W * 0.84:
+        if lines[-1] and measure.textlength(trial, font=font) > W * 0.84:
             lines.append(word)
         else:
             lines[-1] = trial
-    y = int(H * 0.08)
+    keys = {k.strip(".,!?:;") for k in highlight.lower().split()}  # "BLUE GREEN MASK" is three words
+    layers, y = [], int(H * top)
     for line in lines:
+        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
         x = (W - draw.textlength(line, font=font)) / 2
-        draw.text((x, y), line, font=font, fill="white", stroke_width=size // 22, stroke_fill=(60, 45, 35))
+        for word in line.split():
+            hit = word.lower().strip(".,!?:;") in keys
+            draw.text((x, y), word, font=font, fill=accent if hit else "white",
+                      stroke_width=size // 22, stroke_fill=(60, 45, 35))
+            x += draw.textlength(word + " ", font=font)
+        layers.append(layer)
         y += int(size * 1.25)
+    return layers
+
+
+def text_layer(text: str, size: int):
+    from PIL import Image
+
+    out = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    for layer in text_lines(text, size, 0.08):
+        out.alpha_composite(layer)
+    return out
+
+
+def stat_card(text: str, accent: str):
+    """Big number callout ("505nm", "10 phút") on a soft dark pill, centred a little below middle."""
+    from PIL import Image, ImageDraw
+
+    font = _font(170)
+    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    tw = draw.textlength(text, font=font)
+    box_w, box_h, cy = tw + 120, 250, int(H * 0.56)
+    draw.rounded_rectangle(((W - box_w) / 2, cy - box_h / 2, (W + box_w) / 2, cy + box_h / 2), radius=60,
+                           fill=(20, 16, 12, 150))
+    draw.text(((W - tw) / 2, cy - 112), text, font=font, fill=accent)
     return layer
 
 
@@ -360,13 +398,21 @@ def stage_clips(w: Worker, job: dict, d: Path, master: Path) -> list[Path]:
     # Shots after the first start from their own frame (jobs queued before this have none), edited
     # from the studio master so the same product, person and room carry across shots. All frames
     # come first so a single GPU unloads FLUX only once.
+    # Shots without the product are edited from a plate (the master with the product removed):
+    # edited from the master, FLUX kept the mask and turned a hand mirror into a second one.
+    plate = master
+    if job["payload"].get("plate") and not DRY_RUN:
+        w.progress("flux2:plate", 0.18)
+        plate = d / "plate.png"
+        flux_image("flux2_klein_ref", job["payload"]["plate"]["prompt"], master, random.randint(0, 2**31 - 1), plate)
     frames = []
     for i, shot in enumerate(shots):
         frame = master
         if shot.get("keyframe") and not DRY_RUN:
             w.progress(f"flux2:keyframe {i + 1}/{len(shots)}", 0.2)
             frame = d / f"frame_{i}.png"
-            flux_image("flux2_klein_ref", shot["keyframe"]["prompt"], master, random.randint(0, 2**31 - 1), frame)
+            base = plate if shot["keyframe"].get("base") == "plate" else master
+            flux_image("flux2_klein_ref", shot["keyframe"]["prompt"], base, random.randint(0, 2**31 - 1), frame)
         frames.append(frame)
     if GPU_LAYOUT == "single" and not DRY_RUN:
         comfy_unload()
@@ -386,27 +432,77 @@ def stage_clips(w: Worker, job: dict, d: Path, master: Path) -> list[Path]:
     return clips
 
 
-def finish_shot(w: Worker, i: int, shot: dict, clip: Path, d: Path) -> Path:
-    """Burn the shot's on-screen text and mix its Vietnamese voiceover (made by the API with
-    Gemini TTS) over the H3 sound effects, which drop to 35% under the voice."""
-    text, voice = shot.get("on_screen_text", "").strip(), shot.get("voice_url")
-    if not text and not voice:
+# Synthesised accents, no files to license: a soft two-tone chime under a stat card and a breathy
+# whoosh where a flash or dissolve brings the shot in.
+TING = "aevalsrc='0.22*sin(2*PI*1568*t)*exp(-5*t)+0.1*sin(2*PI*2349*t)*exp(-7*t)':s=32000:d=0.9"
+WHOOSH = "anoisesrc=d=0.7:c=pink:a=0.6,highpass=f=500,lowpass=f=5000,afade=t=in:d=0.3,afade=t=out:st=0.35:d=0.35"
+LOWER = ("macro", "close_up", "top_down")  # the subject fills the top: text goes to the lower third
+
+
+# Transitions are baked into each shot as fades and the shots are then simply concatenated:
+# overlapping xfade chains ended the video early on FFmpeg 4.4 (Modal and Kaggle images), dropping
+# shot 5. flash = a quick white dip, dissolve = a soft dip to dark.
+FADE = {"flash": ("white", 0.2, 0.25), "dissolve": ("black", 0.35, 0.35)}  # colour, out, in
+
+
+def finish_shot(w: Worker, i: int, shot: dict, clip: Path, d: Path, accent: str, came_in: str = "cut",
+                goes_out: str = "cut") -> Path:
+    """Animate the shot's on-screen text in line by line with the voice, pop the stat card with a
+    chime, and mix the Vietnamese voiceover (Gemini TTS, made by the API) over the H3 sound, which
+    drops to 35% under the voice."""
+    text, stat, voice = shot.get("on_screen_text", "").strip(), shot.get("stat", "").strip(), shot.get("voice_url")
+    whoosh = came_in in FADE
+    if not (text or stat or voice or whoosh or goes_out in FADE):
         return clip
+    dur = probe_duration(clip)
     inputs = ["-i", str(clip)]
-    video = f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps=24,setsar=1"
+    graph = [f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps=24,setsar=1[base0]"]
+    layers = []  # (png, start)
+    voice_wav = w.download(voice, d / f"voice_{i}.wav") if voice else None
+    spoken = probe_duration(voice_wav) if voice_wav else dur * 0.6
     if text:
-        layer = d / f"text_{i}.png"
-        text_layer(text, 72).save(layer)
-        inputs += ["-i", str(layer)]
-        video += "[base];[base][1:v]overlay=0:0"
-    audio = "[0:a]aresample=32000,aformat=channel_layouts=stereo"
-    if voice:
-        n = len(inputs) // 2
-        inputs += ["-i", str(w.download(voice, d / f"voice_{i}.wav"))]
-        audio += (f",volume=0.35[sfx];[{n}:a]aresample=32000,aformat=channel_layouts=stereo,adelay=300:all=1[vo];"
-                  "[sfx][vo]amix=inputs=2:duration=first:normalize=0")
+        lines = text_lines(text, 72, 0.64 if shot.get("framing") in LOWER else 0.08, shot.get("highlight", ""), accent)
+        step = min(0.6, spoken * 0.7 / len(lines))
+        for k, layer in enumerate(lines):
+            png = d / f"text_{i}_{k}.png"
+            layer.save(png)
+            layers.append((png, 0.3 + k * step))
+    stat_at = min(dur * 0.45, dur - 1.2)
+    if stat:
+        png = d / f"stat_{i}.png"
+        stat_card(stat, accent).save(png)
+        layers.append((png, stat_at))
+    cur = "base0"
+    for n, (png, at) in enumerate(layers, 1):
+        inputs += ["-loop", "1", "-t", f"{dur:.2f}", "-i", str(png)]
+        graph.append(f"[{n}:v]format=rgba,fade=in:st={at:.2f}:d=0.35:alpha=1[l{n}]")
+        # slides up 30 px while it fades in
+        graph.append(f"[{cur}][l{n}]overlay=0:'if(lt(t,{at:.2f}),30,max(0,30-(t-{at:.2f})*90))'[base{n}]")
+        cur = f"base{n}"
+    fades = []
+    if came_in in FADE:
+        color, _, t = FADE[came_in]
+        fades.append(f"fade=t=in:st=0:d={t}:color={color}")
+    if goes_out in FADE:
+        color, t, _ = FADE[goes_out]
+        fades.append(f"fade=t=out:st={dur - t:.2f}:d={t}:color={color}")
+    graph.append(f"[{cur}]{','.join(fades) or 'null'}[v]")
+    sounds = [f"[0:a]aresample=32000,aformat=channel_layouts=stereo{',volume=0.35' if voice_wav else ''}[sfx]"]
+    mix = ["[sfx]"]
+    if voice_wav:
+        n = 1 + len(layers)  # input index after the clip and the text/stat stills
+        inputs += ["-i", str(voice_wav)]
+        sounds.append(f"[{n}:a]aresample=32000,aformat=channel_layouts=stereo,adelay=300:all=1[vo]")
+        mix.append("[vo]")
+    if stat:
+        sounds.append(f"{TING},aformat=channel_layouts=stereo,adelay={int(stat_at * 1000)}:all=1[ting]")
+        mix.append("[ting]")
+    if whoosh:
+        sounds.append(f"{WHOOSH},aformat=sample_rates=32000:channel_layouts=stereo,volume=0.4[whoosh]")
+        mix.append("[whoosh]")
+    sounds.append(f"{''.join(mix)}amix=inputs={len(mix)}:duration=first:normalize=0[a]")
     out = d / f"shot_{i}.mp4"
-    ffmpeg(*inputs, "-filter_complex", f"{video}[v];{audio}[a]", "-map", "[v]", "-map", "[a]",
+    ffmpeg(*inputs, "-filter_complex", ";".join(graph + sounds), "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}",
            *video_codec(), "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "32000", str(out))
     return out
 
@@ -425,7 +521,8 @@ def stage_bgm(w: Worker, job: dict, d: Path) -> Path:
 
 
 def stage_mix(w: Worker, job: dict, d: Path, clips: list[Path], bgm: Path, name: str = "final_commercial.mp4") -> Path:
-    """Concat shots (keeping their SFX/voice), then mix BGM at 25% with fades (system design §2)."""
+    """Concat shots (keeping their SFX/voice and baked-in transitions), then mix the BGM with fades
+    (system design §2)."""
     w.progress("ffmpeg:mix", 0.85)
     raw = d / f"raw_{name}"
     inputs = [x for c in clips for x in ("-i", str(c))]
@@ -451,7 +548,12 @@ def handle(w: Worker, job: dict, d: Path) -> dict:
     w.upload("studio_master", master)
     w.upload("thumbnail", thumb)
     clips = stage_clips(w, job, d, master)
-    clips = [finish_shot(w, i, shot, clip, d) for i, (shot, clip) in enumerate(zip(job["payload"]["shots"], clips, strict=True))]
+    shots = job["payload"]["shots"]
+    accent = job["payload"]["mix"].get("accent", "#E9C77B")
+    joins = [s.get("transition", "cut") for s in shots[:-1]]
+    came_in, goes_out = ["cut", *joins], [*joins, "cut"]
+    clips = [finish_shot(w, i, shot, clip, d, accent, came_in[i], goes_out[i])
+             for i, (shot, clip) in enumerate(zip(shots, clips, strict=True))]
     bgm = stage_bgm(w, job, d)
     final = stage_mix(w, job, d, clips, bgm)
     w.progress("upload", 0.95)
