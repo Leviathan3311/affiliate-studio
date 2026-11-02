@@ -64,7 +64,7 @@ function Workspace() {
   const jobList = jobs.data ?? [];
   // The wizard starts reading the documents; the summary arrives a minute or so after creation.
   const awaitingSummary = !!project.data && !project.data.context && openedAt - Date.parse(project.data.created_at) < 180_000;
-  const busy = awaitingSummary || all.some((a) => a.status === "generating") || jobList.some((j) => j.status === "queued" || j.status === "running");
+  const busy = awaitingSummary || all.some((a) => a.status === "generating") || jobList.some((j) => ["preparing", "queued", "running"].includes(j.status));
   if ((busy ? 4000 : 20000) !== polling) setPolling(busy ? 4000 : 20000);
 
   const refresh = () => {
@@ -210,7 +210,7 @@ type Next = { label: string; why: string; section: Section };
 function nextStep(p: Project, all: Artifact[], jobs: MediaJob[]): Next | null {
   // A failed attempt does not count as done.
   const has = (k: Artifact["kind"], st?: Artifact["status"]) => all.some((a) => a.kind === k && (st ? a.status === st : a.status !== "failed"));
-  const rendering = jobs.some((j) => j.kind === "studio" && (j.status === "queued" || j.status === "running"));
+  const rendering = jobs.some((j) => j.kind === "studio" && ["preparing", "queued", "running"].includes(j.status));
   if (!has("research")) return { label: "Nghiên cứu thị trường", why: "AI tìm hiểu khách hàng, đối thủ và xu hướng trước khi viết.", section: "research" };
   if (!has("script")) return { label: "Viết kịch bản", why: "AI viết 3 phương án kịch bản video từ nghiên cứu.", section: "scripts" };
   if (!has("script", "selected")) return { label: "Chọn kịch bản", why: "Bấm “Chọn bản này” ở phương án ưng nhất.", section: "scripts" };

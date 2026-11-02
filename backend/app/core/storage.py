@@ -84,6 +84,18 @@ def presign_get(key: str, seconds: int | None = None) -> str:
     return _local_url("GET", key, seconds)
 
 
+def put_bytes(key: str, data: bytes, content_type: str) -> None:
+    """Small files the API makes itself (voiceover); everything else uploads with presign_put."""
+    if _r2_enabled():
+        _s3().put_object(
+            Bucket=get_settings().r2_bucket, Key=key, Body=data, ContentType=content_type
+        )
+        return
+    p = local_path(key)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(data)
+
+
 def size_of(key: str) -> int | None:
     """Bytes actually stored, or None when the object is missing (upload not finished)."""
     if _r2_enabled():

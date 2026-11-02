@@ -282,9 +282,9 @@ def stage_images(w: Worker, job: dict, d: Path) -> tuple[Path, Path]:
 FONT_URL = "https://github.com/google/fonts/raw/main/ofl/bevietnampro/BeVietnamPro-Bold.ttf"
 
 
-def draw_headline(path: Path, text: str) -> None:
-    """Draw the headline in a real Vietnamese font over the thumbnail's calm upper third:
-    FLUX misspells Vietnamese diacritics ("Kiểh hagi lân da")."""
+def text_layer(text: str, size: int):
+    """Transparent W x H layer with the text centred and wrapped in the upper part, in a real
+    Vietnamese font: FLUX misspells Vietnamese diacritics ("Kiểh hagi lân da")."""
     from PIL import Image, ImageDraw, ImageFont
 
     font_file = ROOT / "BeVietnamPro-Bold.ttf"
@@ -292,9 +292,9 @@ def draw_headline(path: Path, text: str) -> None:
         r = requests.get(FONT_URL, timeout=60)
         r.raise_for_status()
         font_file.write_bytes(r.content)
-    img = Image.open(path).convert("RGB")
-    draw = ImageDraw.Draw(img)
-    font = ImageFont.truetype(str(font_file), 88)
+    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    font = ImageFont.truetype(str(font_file), size)
     lines = [""]
     for word in text.split():
         trial = f"{lines[-1]} {word}".strip()
@@ -305,9 +305,17 @@ def draw_headline(path: Path, text: str) -> None:
     y = int(H * 0.08)
     for line in lines:
         x = (W - draw.textlength(line, font=font)) / 2
-        draw.text((x, y), line, font=font, fill="white", stroke_width=4, stroke_fill=(60, 45, 35))
-        y += int(font.size * 1.25)
-    img.save(path)
+        draw.text((x, y), line, font=font, fill="white", stroke_width=size // 22, stroke_fill=(60, 45, 35))
+        y += int(size * 1.25)
+    return layer
+
+
+def draw_headline(path: Path, text: str) -> None:
+    from PIL import Image
+
+    img = Image.open(path).convert("RGBA")
+    img.alpha_composite(text_layer(text, 88))
+    img.convert("RGB").save(path)
 
 
 def flux_wf(ref: Path | None) -> str:
@@ -378,6 +386,31 @@ def stage_clips(w: Worker, job: dict, d: Path, master: Path) -> list[Path]:
     return clips
 
 
+def finish_shot(w: Worker, i: int, shot: dict, clip: Path, d: Path) -> Path:
+    """Burn the shot's on-screen text and mix its Vietnamese voiceover (made by the API with
+    Gemini TTS) over the H3 sound effects, which drop to 35% under the voice."""
+    text, voice = shot.get("on_screen_text", "").strip(), shot.get("voice_url")
+    if not text and not voice:
+        return clip
+    inputs = ["-i", str(clip)]
+    video = f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps=24,setsar=1"
+    if text:
+        layer = d / f"text_{i}.png"
+        text_layer(text, 72).save(layer)
+        inputs += ["-i", str(layer)]
+        video += "[base];[base][1:v]overlay=0:0"
+    audio = "[0:a]aresample=32000,aformat=channel_layouts=stereo"
+    if voice:
+        n = len(inputs) // 2
+        inputs += ["-i", str(w.download(voice, d / f"voice_{i}.wav"))]
+        audio += (f",volume=0.35[sfx];[{n}:a]aresample=32000,aformat=channel_layouts=stereo,adelay=300:all=1[vo];"
+                  "[sfx][vo]amix=inputs=2:duration=first:normalize=0")
+    out = d / f"shot_{i}.mp4"
+    ffmpeg(*inputs, "-filter_complex", f"{video}[v];{audio}[a]", "-map", "[v]", "-map", "[a]",
+           *video_codec(), "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "32000", str(out))
+    return out
+
+
 def stage_bgm(w: Worker, job: dict, d: Path) -> Path:
     w.progress("ace-step:bgm", 0.75)
     bgm = d / "bgm_track.wav"
@@ -391,10 +424,10 @@ def stage_bgm(w: Worker, job: dict, d: Path) -> Path:
     return bgm
 
 
-def stage_mix(w: Worker, job: dict, d: Path, clips: list[Path], bgm: Path) -> Path:
+def stage_mix(w: Worker, job: dict, d: Path, clips: list[Path], bgm: Path, name: str = "final_commercial.mp4") -> Path:
     """Concat shots (keeping their SFX/voice), then mix BGM at 25% with fades (system design §2)."""
     w.progress("ffmpeg:mix", 0.85)
-    raw = d / "raw_ad_with_sfx_voice.mp4"
+    raw = d / f"raw_{name}"
     inputs = [x for c in clips for x in ("-i", str(c))]
     norm = "".join(f"[{i}:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps=24,setsar=1[v{i}];"
                    f"[{i}:a]aresample=32000,aformat=channel_layouts=stereo[a{i}];" for i in range(len(clips)))
@@ -403,7 +436,7 @@ def stage_mix(w: Worker, job: dict, d: Path, clips: list[Path], bgm: Path) -> Pa
            "-map", "[v]", "-map", "[a]", *video_codec(), "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "32000", str(raw))
     dur = probe_duration(raw)
     vol = job["payload"]["mix"]["bgm_volume"]
-    final = d / "final_commercial.mp4"
+    final = d / name
     ffmpeg("-i", str(raw), "-i", str(bgm), "-filter_complex",
            f"[1:a]volume={vol},afade=t=in:d=1,afade=t=out:st={max(0, dur - 1.5):.2f}:d=1.5[bgm];"
            "[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]",
@@ -418,18 +451,25 @@ def handle(w: Worker, job: dict, d: Path) -> dict:
     w.upload("studio_master", master)
     w.upload("thumbnail", thumb)
     clips = stage_clips(w, job, d, master)
+    clips = [finish_shot(w, i, shot, clip, d) for i, (shot, clip) in enumerate(zip(job["payload"]["shots"], clips, strict=True))]
     bgm = stage_bgm(w, job, d)
     final = stage_mix(w, job, d, clips, bgm)
     w.progress("upload", 0.95)
     w.upload("bgm", bgm)
     w.upload("final_video", final)
     meta = {"width": W, "height": H, "dry_run": DRY_RUN}
-    return {
+    outputs = {
         "studio_master": meta,
         "thumbnail": meta,
         "bgm": {"duration": probe_duration(bgm)},
         "final_video": {**meta, "duration": round(probe_duration(final), 2), "fps": 24, "audio_sample_rate": 32000},
     }
+    # Shorts reuse the finished shots (voice and text already in): opening + one benefit + CTA
+    for k, plan in enumerate(job["payload"].get("shorts", []), 1):
+        short = stage_mix(w, job, d, [clips[i] for i in plan["shots"]], bgm, f"short_{k}.mp4")
+        w.upload(f"short_{k}", short)
+        outputs[f"short_{k}"] = {**meta, "duration": round(probe_duration(short), 2), "shots": plan["shots"]}
+    return outputs
 
 
 # %% [markdown]

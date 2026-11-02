@@ -13,6 +13,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai import speech
 from app.ai.agents import VIDEO_SHOTS, brand_facts
 from app.core import storage
 from app.core.config import get_settings
@@ -30,6 +31,8 @@ from app.models import (
 
 MAX_SHOTS = VIDEO_SHOTS
 NO_TEXT = " No text, letters, logos or watermarks anywhere in the frame."
+# H3 wrote a garbled end card ("wi chrến hện") over a final "reveal" shot with a "brand jingle"
+NO_TEXT_VIDEO = NO_TEXT + " No captions, subtitles, title cards or end card ever appear."
 MAX_SHORTS = 5
 MIME = {
     "png": "image/png",
@@ -159,7 +162,7 @@ def create_studio_job(
     clips = [
         compose(
             modality="video",
-            task=f"Image-to-video with synchronized audio (SFX, ambience, voice if any), 9:16.{NO_TEXT}",
+            task=f"Image-to-video with synchronized audio (SFX, ambience, voice if any), 9:16.{NO_TEXT_VIDEO}",
             # English only: the Vietnamese description adds nothing the video model can read.
             subject=f"{s['visual_prompt']}. Motion: {s['motion'] or 'slow push-in'}. "
             f"Sound: {s['sfx'] or 'soft spa ambience'}.{same}",
@@ -188,11 +191,17 @@ def create_studio_job(
         "thumbnail": _new_artifact(db, project, "image", f"Thumbnail — {title}"),
         "final_video": _new_artifact(db, project, "video", f"Video quảng cáo — {title}"),
     }
+    # A Short per benefit, cut from the same finished shots: opening + that shot + call to action
+    shorts = [[0, m, len(shots) - 1] for m in range(1, len(shots) - 1)] if len(shots) >= 4 else []
+    for k, plan in enumerate(shorts, 1):
+        label = shots[plan[1]].get("on_screen_text") or f"cảnh {plan[1] + 1}"
+        arts[f"short_{k}"] = _new_artifact(db, project, "short", f"Short {k} — {label}")
     job.output_keys = {
         "studio_master": _key(job, "studio_master.png"),
         "thumbnail": _key(job, "thumbnail.png"),
         "bgm": _key(job, "bgm_track.wav"),
         "final_video": _key(job, "final_commercial.mp4"),
+        **{f"short_{k}": _key(job, f"short_{k}.mp4") for k in range(1, len(shorts) + 1)},
     }
     job.artifact_ids = {name: str(a.id) for name, a in arts.items()}  # type: ignore[assignment]
     job.payload = {
@@ -210,6 +219,8 @@ def create_studio_job(
                 "prompt": c.prompt,
                 "negative_prompt": c.negative_prompt,
                 "duration_seconds": s["duration_seconds"],
+                "on_screen_text": s.get("on_screen_text", ""),
+                "voiceover": s.get("voiceover", ""),
                 "model": c.model,
                 # None for the first shot: it starts from the studio master
                 "keyframe": {"prompt": k.prompt, "model": k.model} if k else None,
@@ -218,7 +229,11 @@ def create_studio_job(
         ],
         "bgm": {"prompt": bgm.prompt, "duration_seconds": duration, "model": bgm.model},
         "mix": {"bgm_volume": 0.25},
+        "shorts": [{"shots": plan} for plan in shorts],
     }
+    if any(s["voiceover"] for s in job.payload["shots"]):
+        job.status = "preparing"  # prepare_voiceover() queues it once every line is spoken
+        job.payload["mix"]["bgm_volume"] = 0.15  # music sits under the voice
     job.prompt_snapshot = {
         "styles": {m: {k: v for k, v in vars(st).items()} for m, st in styles.items()},
         "studio_master": master.to_dict(),
@@ -275,12 +290,38 @@ def create_shorts_job(
     return job
 
 
+def prepare_voiceover(db: Session, job: MediaJob) -> None:
+    """Speak each shot's line, store it next to the job's outputs and lengthen a shot whose line
+    runs longer than planned, then hand the job to the GPU queue."""
+    shots = []
+    for i, shot in enumerate(job.payload["shots"]):
+        shot = dict(shot)
+        if shot.get("voiceover"):
+            wav = speech.speak(shot["voiceover"])
+            shot["voice_key"] = _key(job, f"voice_{i}.wav")
+            storage.put_bytes(shot["voice_key"], wav, "audio/wav")
+            spoken = speech.seconds(wav) + 0.8  # starts 0.3 s in, a breath at the end
+            shot["duration_seconds"] = min(10, max(shot["duration_seconds"], round(spoken, 1)))
+        shots.append(shot)
+    total = int(min(60, max(10, sum(s["duration_seconds"] for s in shots) + 2)))
+    job.payload = {
+        **job.payload,
+        "shots": shots,
+        "bgm": {**job.payload["bgm"], "duration_seconds": total},
+    }
+    job.status, job.stage = "queued", ""
+
+
 def presigned_payload(job: MediaJob) -> dict:
     """What the notebook receives on claim: fresh GET/PUT URLs, never storage credentials."""
     payload = dict(job.payload)
     if job.kind == "studio":
         payload["references"] = [
             {**r, "url": storage.presign_get(r["key"])} for r in payload.get("references", [])
+        ]
+        payload["shots"] = [
+            {**s, "voice_url": storage.presign_get(s["voice_key"])} if s.get("voice_key") else s
+            for s in payload["shots"]
         ]
     else:
         payload["source_url"] = storage.presign_get(payload["source_key"])

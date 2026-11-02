@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # the public URLs the user attached to the project (BRD MOD-03A MVP scope).
     gemini_search: bool = False
     gemini_embedding_model: str = "gemini-embedding-2"
+    # Vietnamese voiceover per shot (app/ai/speech.py); the first model that answers is used
+    gemini_tts_models: list[str] = ["gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"]
+    gemini_tts_voice: str = "Sulafat"  # "warm"
+    gemini_tts_style: str = "warm, calm and gentle, like a spa consultant"
 
     # LightRAG knowledge layer (system design §3.2); needs Postgres + Gemini, else keyword fallback
     lightrag_enabled: bool = True

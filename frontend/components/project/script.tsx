@@ -79,6 +79,7 @@ export function ScriptView({
             <tr className="text-left text-xs text-faint">
               <th className="h-8 w-10 font-normal">#</th>
               <th className="font-normal">Cảnh</th>
+              <th className="font-normal">Lời đọc</th>
               <th className="font-normal">Chữ trên màn hình</th>
               <th className="font-normal">Âm thanh</th>
               <th className="text-right font-normal">Giây</th>
@@ -89,6 +90,7 @@ export function ScriptView({
               <tr key={i} className="border-t border-rule align-top">
                 <td className="py-2 text-muted">{i + 1}</td>
                 <td className="py-2.5 pr-3">{shot.description}<p className="text-xs text-faint">{shot.motion}</p></td>
+                <td className="py-2 pr-3">{shot.voiceover || "—"}</td>
                 <td className="py-2 pr-3">{shot.on_screen_text || "—"}</td>
                 <td className="py-2 pr-3">{shot.sfx || "—"}</td>
                 <td className="py-2 text-right">{shot.duration_seconds}</td>

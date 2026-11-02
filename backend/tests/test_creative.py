@@ -505,3 +505,91 @@ def test_script_without_continuity_is_upgraded_before_generating(
     assert "Product: smooth black basalt stones" in job["prompt_snapshot"]["shots"][0]["prompt"]
     a = client.get(f"/api/v1/artifacts/{a['id']}", headers=h).json()
     assert a["current"]["version_number"] == 2 and a["status"] == "selected"
+
+
+def test_voiceover_is_spoken_before_the_job_is_queued(client, db, spa, gemini, monkeypatch):
+    import io
+    import wave
+
+    from app.ai import speech
+
+    def fake_wav(seconds: float) -> bytes:
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1), w.setsampwidth(2), w.setframerate(8000)
+            w.writeframes(b"\0\0" * int(8000 * seconds))
+        return buf.getvalue()
+
+    spoken = []
+    monkeypatch.setattr(speech, "speak", lambda text: spoken.append(text) or fake_wav(6.0))
+    voiced = {
+        **SCRIPT,
+        "shots": [{**SCRIPT["shots"][0], "voiceover": "Vai gáy mỏi nhừ?"}, SCRIPT["shots"][1]],
+    }
+    gemini_fake = agents.gemini_json
+
+    def fake(db, **kw):
+        if kw["purpose"] == "scripts.generate":
+            return GeminiResult({"variants": [voiced]}, "gemini-test", [])
+        return gemini_fake(db, **kw)
+
+    monkeypatch.setattr(agents, "gemini_json", fake)
+    h, p = spa
+    base = f"/api/v1/projects/{p['id']}"
+    client.post(f"{base}/scripts", headers=h, json={"count": 1})
+    a = client.get(f"{base}/artifacts?kind=script", headers=h).json()[0]
+    client.post(f"/api/v1/artifacts/{a['id']}/select", headers=h)
+    job = client.post(f"{base}/generate", headers=h, json={"script_artifact_id": a["id"]}).json()
+    assert job["status"] == "preparing"  # nothing for the GPU until the voice exists
+
+    claimed = client.post(
+        "/api/v1/worker/jobs/claim",
+        headers={"Authorization": "Bearer worker-secret"},
+        json={"worker_id": "nb1", "kinds": ["studio"]},
+    ).json()["job"]
+    assert spoken == ["Vai gáy mỏi nhừ?"]
+    first, second = claimed["payload"]["shots"]
+    assert first["voice_url"] and first["duration_seconds"] == 6.8  # 5 s planned, 6 s spoken
+    assert "voice_url" not in second and second["duration_seconds"] == 5
+
+
+def test_five_shot_ad_gets_one_short_per_benefit(client, db, spa, gemini, monkeypatch):
+    shot = SCRIPT["shots"][0]
+    five = {**SCRIPT, "shots": [{**shot, "on_screen_text": f"Ý {i}"} for i in range(1, 6)]}
+    real = agents.gemini_json
+
+    def fake(db, **kw):
+        if kw["purpose"] == "scripts.generate":
+            return GeminiResult({"variants": [five]}, "gemini-test", [])
+        return real(db, **kw)
+
+    monkeypatch.setattr(agents, "gemini_json", fake)
+    h, p = spa
+    base = f"/api/v1/projects/{p['id']}"
+    client.post(f"{base}/scripts", headers=h, json={"count": 1})
+    a = client.get(f"{base}/artifacts?kind=script", headers=h).json()[0]
+    client.post(f"/api/v1/artifacts/{a['id']}/select", headers=h)
+    client.post(f"{base}/generate", headers=h, json={"script_artifact_id": a["id"]})
+    shorts = client.get(f"{base}/artifacts?kind=short", headers=h).json()
+    assert sorted(s["display_name"] for s in shorts) == [
+        "Short 1 — Ý 2",
+        "Short 2 — Ý 3",
+        "Short 3 — Ý 4",
+    ]
+
+    w = {"Authorization": "Bearer worker-secret"}
+    job = client.post(
+        "/api/v1/worker/jobs/claim", headers=w, json={"worker_id": "nb1", "kinds": ["studio"]}
+    ).json()["job"]
+    assert [s["shots"] for s in job["payload"]["shorts"]] == [[0, 1, 4], [0, 2, 4], [0, 3, 4]]
+    for up in job["uploads"].values():
+        put_presigned(client, up["url"], b"x" * 10, up["content_type"])
+    names = ("studio_master", "thumbnail", "final_video", "bgm", "short_1", "short_2", "short_3")
+    done = client.post(
+        f"/api/v1/worker/jobs/{job['id']}/complete",
+        headers=w,
+        json={"outputs": {n: {} for n in names}},
+    ).json()
+    assert done == {"status": "succeeded", "missing": []}
+    shorts = client.get(f"{base}/artifacts?kind=short", headers=h).json()
+    assert {s["status"] for s in shorts} == {"ready"}

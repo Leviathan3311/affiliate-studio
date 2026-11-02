@@ -300,6 +300,7 @@ export interface Shot {
   visual_prompt: string;
   motion: string;
   on_screen_text: string;
+  voiceover?: string;
   sfx: string;
   duration_seconds: number;
 }
@@ -387,7 +388,7 @@ export interface ChatMessage {
 export interface MediaJob {
   id: string;
   kind: "studio" | "shorts";
-  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  status: "preparing" | "queued" | "running" | "succeeded" | "failed" | "cancelled";
   stage: string;
   progress: number;
   attempts: number;

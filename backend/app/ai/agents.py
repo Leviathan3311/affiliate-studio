@@ -253,6 +253,7 @@ class Shot(BaseModel):
     visual_prompt: str
     motion: str = ""
     on_screen_text: str = ""
+    voiceover: str = ""  # spoken Vietnamese line for this shot (Gemini TTS)
     sfx: str = ""
     duration_seconds: float = Field(default=4, ge=1, le=15)
 
@@ -286,11 +287,12 @@ class ScriptsOut(BaseModel):
     variants: list[ScriptVariant] = Field(min_length=1, max_length=5)
 
 
-VIDEO_SHOTS = 3  # each MiniMax H3 clip is a few seconds; 3 shots ~ a 15-20s ad
+VIDEO_SHOTS = 5  # each MiniMax H3 clip is 5-7 s; 5 shots ~ a 30 s ad
 
-SCRIPT_RULES = f"""Mỗi kịch bản là quảng cáo video ngắn 9:16 cho Facebook Page/Reels (15-20 giây) có ảnh \
-thumbnail. Viết ĐÚNG {VIDEO_SHOTS} shot, mỗi shot 5-7 giây: video chỉ dựng {VIDEO_SHOTS} cảnh, nên câu chuyện \
-phải trọn vẹn (mở, dùng sản phẩm, kết quả) trong {VIDEO_SHOTS} shot đó. Mỗi shot được tạo RIÊNG bằng model ảnh \
+SCRIPT_RULES = f"""Mỗi kịch bản là quảng cáo video 9:16 cho Facebook Page/Reels (khoảng 30 giây) có ảnh \
+thumbnail và giọng đọc. Viết ĐÚNG {VIDEO_SHOTS} shot, mỗi shot 5-7 giây, theo thứ tự: (1) câu mở đầu chạm \
+nỗi lo của khách, (2) giới thiệu sản phẩm, (3) công năng hoặc lợi ích thứ nhất, (4) lợi ích thứ hai hoặc \
+cách dùng, (5) kết quả và lời kêu gọi. Công năng, thông số, thời gian dùng chỉ lấy từ tài liệu dự án. Mỗi shot được tạo RIÊNG bằng model ảnh \
 rồi model video, model không nhớ shot trước, nên kịch bản phải tự giữ cho các shot liền mạch:
 - Kịch bản là MỘT câu chuyện liên tục: cùng một sản phẩm, cùng một khách, cùng một phòng từ đầu đến \
 cuối; shot sau là hành động tiếp theo của shot trước (ví dụ: cầm mặt nạ lên → đeo mặt nạ lên mặt → mặt \
@@ -312,10 +314,15 @@ Công dụng thể hiện qua người thật dùng sản phẩm thật (ví d�
 giãn), không vẽ cơ chế bên trong da.
 - Mỗi shot MỘT hành động đơn giản, chậm, tay ít chạm sản phẩm. Không quay lúc đang đeo vào hay đang \
 tháo ra (model video vẽ thêm dây, thêm tay, thêm sản phẩm); quay trạng thái trước hoặc sau: mặt nạ đã \
-nằm trên mặt, hoặc đã nằm yên trong tay/trên khay. Mỗi khung chỉ có MỘT sản phẩm.
+nằm trên mặt, hoặc đã nằm yên trong tay/trên khay. Mỗi khung chỉ có MỘT sản phẩm. Shot 1 cũng là ảnh \
+chính của quảng cáo nên sản phẩm phải nằm rõ trong khung (ví dụ khách cầm sản phẩm). Shot cuối không \
+"reveal" logo hay màn hình kết, sfx không dùng "jingle": model video sẽ tự vẽ chữ sai.
 - description (tiếng Việt) kể đúng cảnh đó, khớp với visual_prompt.
+- voiceover (tiếng Việt): câu thuyết minh của shot đó, đọc thong thả vừa trong thời lượng shot (khoảng \
+3 tiếng mỗi giây: shot 6 giây tối đa 18 tiếng), viết số bằng chữ khi đọc tự nhiên hơn. on_screen_text: tối \
+đa 8 chữ, ý chính của shot (được chèn lên hình bằng font thật).
 - motion: chuyển động máy quay/chủ thể bằng tiếng Anh, nối được với shot sau. music_mood: tag nhạc nền \
-tiếng Anh. caption/hook/cta/on_screen_text: tiếng Việt."""
+tiếng Anh. caption/hook/cta/on_screen_text/voiceover: tiếng Việt."""
 
 
 def _script_flags(db: Session, project: Project, variant: dict) -> list[str]:
@@ -329,6 +336,7 @@ def _script_flags(db: Session, project: Project, variant: dict) -> list[str]:
             variant["voiceover"],
         ]
         + [s["on_screen_text"] for s in variant["shots"]]
+        + [s.get("voiceover", "") for s in variant["shots"]]
     )
     return ["unverified_price"] if extract_prices(text) - allowed else []
 
@@ -343,7 +351,7 @@ nhau rõ rệt về góc tiếp cận (ví dụ: giải quyết nỗi lo, ưu đ
 Nếu không có research report, ghi rõ trong "insight" rằng đây là giả định.
 Trả JSON: {{"variants":[{{"title","angle","insight","hook","key_message","cta","duration_seconds",
 "voiceover","music_mood","caption","hashtags":[],"continuity":{{"product","talent","setting"}},
-"shots":[{{"description","visual_prompt","motion","on_screen_text","sfx","duration_seconds"}}]}}]}}"""
+"shots":[{{"description","visual_prompt","motion","on_screen_text","voiceover","sfx","duration_seconds"}}]}}]}}"""
     parts = [{"text": project_brief(db, project)}]
     if research:
         slim = {
@@ -385,7 +393,7 @@ yêu cầu đổi. {SCRIPT_RULES}
 Trả MỘT object JSON (không phải mảng) đúng schema của kịch bản: {{"title","angle","insight","hook",
 "key_message","cta","duration_seconds","voiceover","music_mood","caption","hashtags":[],
 "continuity":{{"product","talent","setting"}},
-"shots":[{{"description","visual_prompt","motion","on_screen_text","sfx","duration_seconds"}}]}}.
+"shots":[{{"description","visual_prompt","motion","on_screen_text","voiceover","sfx","duration_seconds"}}]}}.
 Sửa một shot thì giữ nguyên continuity, trừ khi được yêu cầu đổi sản phẩm, người hoặc bối cảnh; đổi continuity thì sửa mọi shot cho khớp."""
     clean = {k: v for k, v in script.items() if k != "flags"}
     res = gemini_json(

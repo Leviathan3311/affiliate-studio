@@ -12,6 +12,7 @@ const JOB_NAME = { studio: "Ảnh & video quảng cáo", shorts: "Cắt Shorts" 
 
 /** The worker's stage codes in words a spa owner reads (no model or machine names). */
 export function stageLabel(j: MediaJob): string {
+  if (j.status === "preparing") return "Đang tạo giọng đọc";
   if (j.status === "queued") return "Đang chờ đến lượt";
   const s = j.stage || "";
   const n = s.match(/(\d+)\/(\d+)/);
@@ -30,7 +31,7 @@ export function stageLabel(j: MediaJob): string {
 
 /** One line per running job, shown above every step so progress is never hidden. */
 export function JobStrip({ jobs, onChanged }: { jobs: MediaJob[]; onChanged: () => void }) {
-  const active = jobs.filter((j) => j.status === "queued" || j.status === "running");
+  const active = jobs.filter((j) => ["preparing", "queued", "running"].includes(j.status));
   if (!active.length) return null;
   return (
     <div className="space-y-2">
@@ -39,8 +40,8 @@ export function JobStrip({ jobs, onChanged }: { jobs: MediaJob[]; onChanged: () 
           <span className="text-sm font-medium">{JOB_NAME[j.kind]}</span>
           <span className="text-sm text-muted">{stageLabel(j)}</span>
           <span className="flex min-w-40 flex-1 items-center gap-3">
-            <Progress value={j.status === "queued" ? 0 : j.progress} label={`${JOB_NAME[j.kind]}: ${stageLabel(j)}`} />
-            <span className="w-9 text-right text-xs text-faint">{j.status === "queued" ? "" : `${Math.round(j.progress * 100)}%`}</span>
+            <Progress value={j.status === "running" ? j.progress : 0} label={`${JOB_NAME[j.kind]}: ${stageLabel(j)}`} />
+            <span className="w-9 text-right text-xs text-faint">{j.status === "running" ? `${Math.round(j.progress * 100)}%` : ""}</span>
           </span>
           <Button variant="ghost" className="h-8" onClick={async () => {
             if (!confirm("Dừng tạo? Phần đã làm sẽ không được lưu.")) return;
@@ -89,7 +90,7 @@ export function MediaSection({
   return (
     <div className="space-y-[14px]">
       {last?.status === "failed" && <FailedJob job={last} onRetry={kind === "studio" ? onRetry : undefined} />}
-      {kinds.includes("short") && <ShortsLauncher project={project} videos={items.filter((a) => a.kind === "video" && a.current?.url)} onChanged={onChanged} />}
+      {kinds.includes("short") && <ShortsLauncher project={project} onChanged={onChanged} />}
       {!shown.length && (
         <Empty title={kinds.includes("short") ? "Chưa có Shorts" : "Chưa có ảnh/video"}>
           {kinds.includes("short") ? "Chọn video quảng cáo hoặc video spa tự quay để cắt thành Reels 9:16." : "Ở mục Kịch bản, bấm “Chọn bản này” rồi “Tạo ảnh & video”."}
@@ -135,7 +136,7 @@ function ApproveButton({ a, onChanged }: { a: Artifact; onChanged: () => void })
   );
 }
 
-function ShortsLauncher({ project, videos, onChanged }: { project: Project; videos: Artifact[]; onChanged: () => void }) {
+function ShortsLauncher({ project, onChanged }: { project: Project; onChanged: () => void }) {
   const inputs = useApi<ProjectInput[]>(`/projects/${project.id}/inputs`);
   const uploaded = inputs.data?.filter((i) => i.mime_type.startsWith("video/")) ?? [];
   const [source, setSource] = useState("");
@@ -163,12 +164,11 @@ function ShortsLauncher({ project, videos, onChanged }: { project: Project; vide
 
   return (
     <Panel title="Cắt video thành Shorts 9:16">
-      <p className="mb-4 text-sm text-muted">AI nghe lời thoại, chọn 2–5 đoạn 15–30 giây cuốn nhất, cắt dọc theo khuôn mặt và thêm phụ đề.</p>
+      <p className="mb-4 text-sm text-muted">Video quảng cáo AI tạo đã tự có Shorts (mỗi Short một lợi ích). Ở đây cắt video dài của spa: AI nghe lời thoại, chọn 2–5 đoạn 15–30 giây cuốn nhất, cắt dọc theo khuôn mặt và thêm phụ đề.</p>
       <div className="grid gap-3 sm:grid-cols-[1fr_120px_1fr_auto] sm:items-end">
         <label className="flex flex-col gap-1.5 text-sm font-medium">Video nguồn
           <select value={source} onChange={(e) => setSource(e.target.value)} className="h-9 rounded-[var(--radius-control)] border border-control px-3 font-normal">
             <option value="">Chọn video</option>
-            {videos.map((v) => <option key={v.id} value={`a:${v.id}`}>{v.display_name}</option>)}
             {uploaded.map((u) => <option key={u.id} value={`i:${u.id}`} disabled={!u.usage_confirmed}>{u.filename}{u.usage_confirmed ? "" : " (cần xác nhận quyền dùng)"}</option>)}
           </select>
         </label>

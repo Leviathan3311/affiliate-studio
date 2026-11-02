@@ -543,7 +543,9 @@ def delete_project(project_id: uuid.UUID, ctx: Marketing):
     p = _project(ctx, project_id)
     p.status, p.deleted_at = "deleted", utcnow()
     for job in ctx.db.scalars(
-        select(MediaJob).where(MediaJob.project_id == p.id, MediaJob.status == "queued")
+        select(MediaJob).where(
+            MediaJob.project_id == p.id, MediaJob.status.in_(("preparing", "queued"))
+        )
     ):
         job.status = "cancelled"
     ctx.audit("project.deleted", "project", p.id)
@@ -1032,8 +1034,28 @@ def generate(project_id: uuid.UUID, body: GenerateIn, ctx: Marketing, bg: Backgr
     )
     ctx.audit("media.generate", "media_job", job.id, script_version=str(version.id))
     ctx.db.commit()
-    bg.add_task(media.wake_worker, "studio")
+    bg.add_task(_prepare_and_wake, job.id)
     return job
+
+
+def _prepare_and_wake(job_id: uuid.UUID) -> None:
+    """Voiceover first (Gemini TTS, a few seconds per shot), then start the GPU worker."""
+    with dbmod.SessionLocal() as db:
+        job = db.get(MediaJob, job_id)
+        if job.status == "preparing":
+            try:
+                media.prepare_voiceover(db, job)
+            except LLMUnavailable:
+                media.fail(
+                    db,
+                    job,
+                    "Không tạo được giọng đọc: AI đang bận, hãy bấm tạo lại sau ít phút",
+                    False,
+                )
+            db.commit()
+        if job.status != "queued":
+            return
+    media.wake_worker("studio")
 
 
 @router.post("/projects/{project_id}/shorts", response_model=JobOut, status_code=202)
@@ -1077,7 +1099,7 @@ def list_jobs(project_id: uuid.UUID, ctx: AnyMember):
 @router.post("/media-jobs/{job_id}/cancel", response_model=JobOut)
 def cancel_job(job_id: uuid.UUID, ctx: Marketing):
     job = ctx.get(MediaJob, job_id)
-    if job.status not in ("queued", "running"):
+    if job.status not in ("preparing", "queued", "running"):
         raise HTTPException(status.HTTP_409_CONFLICT, "Việc này đã xong hoặc đã dừng")
     media.fail(ctx.db, job, "Người dùng đã huỷ", retryable=False)
     job.status = "cancelled"
