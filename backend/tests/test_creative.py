@@ -269,6 +269,30 @@ def test_project_to_kaggle_to_published_post(client, db, spa, gemini):
     db.commit()
     assert db.get(PublishingJob, __import__("uuid").UUID(pj["id"])).status == "published"
 
+    # the same video to the Instagram account linked to that Page
+    from app.models import SocialAccount
+
+    fb = db.get(SocialAccount, __import__("uuid").UUID(page["id"]))
+    ig = SocialAccount(
+        workspace_id=fb.workspace_id,
+        provider="instagram",
+        external_id="178",
+        name="@lotus",
+        token_encrypted=fb.token_encrypted,
+    )
+    db.add(ig)
+    db.commit()
+    body["social_account_id"] = str(ig.id)
+    long = {**body, "caption": "x" * 2201}
+    assert client.post("/api/v1/publishing-jobs", headers=h, json=long).status_code == 422
+    pj = client.post("/api/v1/publishing-jobs", headers=h, json=body).json()
+    assert pj["page_name"] == "@lotus · Instagram"
+    db.expire_all()
+    for j in publishing.due_jobs(db):
+        publishing.run_job(db, j)
+    db.commit()
+    assert db.get(PublishingJob, __import__("uuid").UUID(pj["id"])).status == "published"
+
 
 def test_research_demotes_claims_without_real_source(client, spa, gemini, monkeypatch):
     from app.ai import sources

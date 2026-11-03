@@ -10,7 +10,7 @@ Thứ tự nên làm:
 2. [Supabase](#2-supabase-cơ-sở-dữ-liệu): cơ sở dữ liệu
 3. [Google AI Studio](#3-google-ai-studio-gemini) và [Groq](#4-groq-qwen): AI
 4. [Langfuse](#5-langfuse-theo-dõi-ai): theo dõi AI
-5. [Meta for Developers](#6-meta-for-developers-fanpage-và-messenger): Fanpage và Messenger
+5. [Meta for Developers](#6-meta-for-developers-fanpage-messenger-và-instagram): Fanpage, Messenger và Instagram
 6. [Hugging Face](#7-hugging-face), [Modal](#8-modal-gpu-l40s-tự-bật-khi-có-việc) hoặc [Kaggle](#9-kaggle-gpu-miễn-phí-bật-tay): GPU tạo ảnh, video
 
 Trước khi bắt đầu, tạo sẵn các khoá bí mật của riêng hệ thống:
@@ -175,7 +175,7 @@ Ghi lại từng lần gọi AI (câu hỏi, câu trả lời, số token, thờ
    LANGFUSE_BASE_URL=https://cloud.langfuse.com
    ```
 
-## 6. Meta for Developers: Fanpage và Messenger
+## 6. Meta for Developers: Fanpage, Messenger và Instagram
 
 Cần một tài khoản Facebook là **admin của Fanpage** spa.
 
@@ -201,7 +201,15 @@ Cần một tài khoản Facebook là **admin của Fanpage** spa.
    ```
 
    Để `META_DRY_RUN=true` nếu chỉ muốn chạy thử: tin nhắn và bài đăng được ghi lại nhưng không gửi lên Facebook.
-6. Khởi động lại API, vào web: **Cài đặt → Facebook Page → Kết nối bằng Facebook**, chọn Page.
+6. Khởi động lại API, vào web: **Cài đặt → Facebook & Instagram → Kết nối bằng Facebook**, chọn Page.
+
+**Instagram (chỉ đăng bài):** GrowthPilot đăng ảnh và Reels lên Instagram của spa bằng chính lần kết nối Facebook ở trên.
+- Chuyển Instagram sang **tài khoản chuyên nghiệp** (Business hoặc Creator) trong app Instagram: **Cài đặt → Loại tài khoản và công cụ**.
+- Liên kết Instagram đó với Fanpage: trên Facebook, vào Page → **Cài đặt → Tài khoản đã liên kết → Instagram**.
+- Trong app Meta, thêm use case **Manage messaging & content on Instagram** để có quyền `instagram_basic` và `instagram_content_publish`.
+- Bấm **Kết nối bằng Facebook** lại; tài khoản `@tên` hiện thêm dưới Page. Khi đăng, chọn "· Instagram" ở ô **Đăng lên**.
+
+Instagram chỉ nhận ảnh JPG (GrowthPilot tự đổi ảnh PNG) và nội dung tối đa 2.200 ký tự; video được đăng dạng Reels. Tin nhắn và bình luận Instagram chưa vào hộp thư: phần đó cần Meta duyệt quyền `instagram_manage_messages` và xác minh doanh nghiệp.
 
 Khi app còn ở chế độ **Development**, chỉ tài khoản có vai trò trong app mới nhắn được tới GrowthPilot. Thêm nhân viên làm Tester ở **App Roles → Roles** để thử. Muốn phục vụ mọi khách, làm theo [docs/meta-app-review.md](meta-app-review.md).
 

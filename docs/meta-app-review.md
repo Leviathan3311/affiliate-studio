@@ -36,15 +36,18 @@ Meta Business Suite → **Settings → Business info → Business verification**
 | `pages_show_list` | Lets the spa owner pick which of the Pages they manage to connect to GrowthPilot. |
 | `pages_read_engagement` | Reads the connected Page's name and basic information to label the inbox and the publishing calendar. |
 | `pages_manage_posts` | The spa approves an image or video created in GrowthPilot and publishes it to its own Page, now or at a scheduled time. Nothing is posted without the spa's approval. |
+| `instagram_basic` | Reads the username of the Instagram professional account linked to the spa's Page, so the spa can choose it as a publishing destination. |
+| `instagram_content_publish` | The spa approves an image or video created in GrowthPilot and publishes it to its own Instagram account as a photo or Reel, now or at a scheduled time. Nothing is posted without the spa's approval. |
 
 ## 4. Quay video minh hoạ (một video cho mỗi quyền, hoặc một video dài đủ các bước)
 
 Quay màn hình, có thể nói hoặc chèn chữ tiếng Anh:
 
-1. Đăng nhập GrowthPilot → **Cài đặt → Facebook Page → Kết nối bằng Facebook**, chọn Page, đồng ý các quyền. Page hiện "Đang kết nối". *(pages_show_list, pages_manage_metadata, pages_read_engagement)*
+1. Đăng nhập GrowthPilot → **Cài đặt → Facebook & Instagram → Kết nối bằng Facebook**, chọn Page, đồng ý các quyền. Page hiện "Đang kết nối". *(pages_show_list, pages_manage_metadata, pages_read_engagement)*
 2. Dùng một tài khoản Facebook khác nhắn vào Page: "Cho em hỏi giá massage body". Tin hiện trong **Hộp thư** của GrowthPilot, kèm gợi ý của AI.
 3. Bấm **Dùng gợi ý này** → **Gửi**. Mở Messenger của khách: câu trả lời đã tới. *(pages_messaging)*
 4. Mở một dự án → **Đăng bài**, chọn ảnh đã duyệt → **Đăng ngay**. Mở Page: bài đã lên. *(pages_manage_posts)*
+5. Chọn video đã duyệt, ô **Đăng lên** chọn tài khoản "· Instagram" → **Đăng ngay**. Mở Instagram: Reel đã lên. *(instagram_basic, instagram_content_publish)*
 
 Trong lúc quay, tài khoản khách phải được thêm làm **Tester** (App Roles → Roles), vì app vẫn đang ở Development.
 

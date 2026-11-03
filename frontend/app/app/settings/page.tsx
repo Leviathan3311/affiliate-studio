@@ -15,7 +15,7 @@ const TABS = [
   { id: "faq", label: "Câu hỏi thường gặp" },
   { id: "branches", label: "Chi nhánh" },
   { id: "styles", label: "Phong cách hình ảnh" },
-  { id: "integrations", label: "Facebook Page" },
+  { id: "integrations", label: "Facebook & Instagram" },
   { id: "ai", label: "Giờ trực AI" },
   { id: "members", label: "Thành viên" },
 ] as const;
@@ -345,21 +345,22 @@ function IntegrationsTab({ connected, metaError }: { connected: string | null; m
 
   return (
     <div className="max-w-2xl">
-      <Panel title="Page đã kết nối">
-        {connected && <p role="status" className="mb-3 text-sm text-positive">Đã kết nối {connected} Page.</p>}
+      <Panel title="Tài khoản đã kết nối">
+        {connected && <p role="status" className="mb-3 text-sm text-positive">Đã kết nối {connected} tài khoản.</p>}
         {metaError && <p role="alert" className="mb-3 text-sm text-negative">{metaError === "cancelled" ? "Bạn đã huỷ kết nối Facebook." : "Chưa kết nối được Facebook, vui lòng thử lại."}</p>}
         {list.loading && <Skeleton rows={2} />}
-        {list.data?.length === 0 && <Empty title="Chưa kết nối Facebook Page">Kết nối để nhận tin nhắn Messenger vào hộp thư.</Empty>}
+        {list.data?.length === 0 && <Empty title="Chưa kết nối Facebook Page">Kết nối để nhận tin nhắn Messenger vào hộp thư và đăng bài lên Facebook, Instagram.</Empty>}
         <ul className="divide-y divide-rule">
           {list.data?.map((a) => (
             <li key={a.id} className="flex items-center gap-3 py-3">
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{a.name || "Facebook Page"}</p>
+                <p className="text-xs text-muted">{a.provider === "instagram" ? "Instagram · chỉ đăng bài" : "Facebook Page"}</p>
               </div>
               <Pill tone={a.status === "connected" ? "positive" : "neutral"}>{a.status === "connected" ? "Đang kết nối" : "Đã ngắt"}</Pill>
               {admin && a.status === "connected" && (
                 <Button variant="danger" className="h-8 text-xs" onClick={async () => {
-                  if (!confirm(`Ngắt kết nối ${a.name}? Tin nhắn mới sẽ không vào hộp thư.`)) return;
+                  if (!confirm(a.provider === "instagram" ? `Ngắt kết nối ${a.name}? Không đăng bài lên tài khoản này được nữa.` : `Ngắt kết nối ${a.name}? Tin nhắn mới sẽ không vào hộp thư.`)) return;
                   await api(`/integrations/social-accounts/${a.id}`, { method: "DELETE" });
                   list.reload();
                 }}>Ngắt</Button>
@@ -370,6 +371,7 @@ function IntegrationsTab({ connected, metaError }: { connected: string | null; m
         {admin && (
           <div className="mt-4 space-y-2">
             <Button variant="primary" onClick={oauth}>Kết nối bằng Facebook</Button>
+            <p className="text-xs text-muted">Instagram được kết nối cùng lúc nếu là tài khoản chuyên nghiệp đã liên kết với Page.</p>
             {oauthError && <ErrorNote error={oauthError} />}
           </div>
         )}

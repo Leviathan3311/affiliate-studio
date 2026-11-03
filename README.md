@@ -4,7 +4,7 @@
 
 **An AI marketing and customer-care assistant for Vietnamese spas**
 
-Answers Facebook Messenger · Manages customers and bookings · Researches the market, writes video scripts, and creates ad images and videos · Schedules Page posts
+Answers Facebook Messenger · Manages customers and bookings · Researches the market, writes video scripts, and creates ad images and videos · Schedules Facebook Page and Instagram posts
 
 </div>
 
@@ -29,7 +29,7 @@ Answers Facebook Messenger · Manages customers and bookings · Researches the m
 flowchart LR
     U[Browser] --> W[Web<br/>Next.js]
     W --> A[API + worker<br/>FastAPI]
-    FB[Facebook<br/>Messenger & Pages] <-->|webhook / Graph API| A
+    FB[Facebook & Instagram<br/>Messenger, Pages, Reels] <-->|webhook / Graph API| A
     A --> DB[(PostgreSQL<br/>Supabase)]
     A --> S[(File storage<br/>Cloudflare R2)]
     A --> AI[Gemini · Groq]

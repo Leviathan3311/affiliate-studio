@@ -39,16 +39,28 @@ class ManualConnect(BaseModel):
     page_access_token: str = Field(min_length=20, max_length=1000)
 
 
-def _upsert_page(db, workspace_id: uuid.UUID, page_id: str, name: str, token: str) -> SocialAccount:
+def _upsert_page(
+    db,
+    workspace_id: uuid.UUID,
+    page_id: str,
+    name: str,
+    token: str,
+    provider: str = "facebook",
+) -> SocialAccount:
+    """An Instagram account is stored with the token of the Page it is linked to."""
     acc = db.scalar(
         select(SocialAccount).where(
-            SocialAccount.provider == "facebook", SocialAccount.external_id == page_id
+            SocialAccount.provider == provider, SocialAccount.external_id == page_id
         )
     )
     if acc and acc.workspace_id != workspace_id:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Page này đã được kết nối với một spa khác")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Tài khoản này đã được kết nối với một spa khác"
+        )
     if acc is None:
-        acc = SocialAccount(workspace_id=workspace_id, external_id=page_id, token_encrypted="")
+        acc = SocialAccount(
+            workspace_id=workspace_id, provider=provider, external_id=page_id, token_encrypted=""
+        )
         db.add(acc)
     acc.name, acc.token_encrypted, acc.status = name, encrypt_secret(token), "connected"
     db.flush()
@@ -92,6 +104,20 @@ def meta_callback(db: DB, state: str, code: str | None = None, error: str | None
             connected += 1
         except (HTTPException, httpx.HTTPError) as e:
             log.warning("page %s not connected: %s", p.get("id"), e)
+        if ig := p.get("instagram_business_account"):
+            try:
+                with db.begin_nested():
+                    _upsert_page(
+                        db,
+                        ws_id,
+                        ig["id"],
+                        "@" + ig.get("username", ""),
+                        p["access_token"],
+                        provider="instagram",
+                    )
+                connected += 1
+            except HTTPException as e:
+                log.warning("instagram %s not connected: %s", ig.get("id"), e.detail)
     db.add(
         AuditLog(
             workspace_id=ws_id,
@@ -99,7 +125,7 @@ def meta_callback(db: DB, state: str, code: str | None = None, error: str | None
             action="meta.connected",
             target_type="workspace",
             target_id=str(ws_id),
-            meta={"pages": connected},
+            meta={"accounts": connected},
         )
     )
     db.commit()

@@ -1,4 +1,4 @@
-"""Publishing calendar (MOD-05): approved creative -> Facebook Page, now or scheduled."""
+"""Publishing calendar (MOD-05): approved creative -> Facebook Page or Instagram, now or later."""
 
 import uuid
 from datetime import datetime
@@ -53,7 +53,9 @@ def _out(db, j: PublishingJob) -> PublishOut:
     page = db.get(SocialAccount, j.social_account_id)
     return PublishOut.model_validate(j).model_copy(
         update={
-            "page_name": page.name if page else "",
+            "page_name": (page.name + (" · Instagram" if page.provider == "instagram" else ""))
+            if page
+            else "",
             "artifact_name": art.display_name if art else "",
         }
     )
@@ -92,7 +94,11 @@ def create_job(body: PublishIn, ctx: Marketing):
         raise HTTPException(status.HTTP_409_CONFLICT, "Chỉ đăng được ảnh hoặc video đã duyệt")
     page = ctx.get(SocialAccount, body.social_account_id)
     if page.status != "connected":
-        raise HTTPException(status.HTTP_409_CONFLICT, "Page chưa kết nối")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Tài khoản chưa kết nối")
+    if page.provider == "instagram" and len(body.caption) > 2200:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Instagram chỉ nhận nội dung tối đa 2.200 ký tự"
+        )
     v = ctx.db.get(ArtifactVersion, art.current_version_id)
     obj = ctx.db.get(StorageObject, v.storage_object_id) if v.storage_object_id else None
     if obj is None:
