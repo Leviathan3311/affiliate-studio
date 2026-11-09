@@ -8,7 +8,7 @@
 # `HF_TOKEN`.
 #
 # VRAM plan (Phương án A): `cuda:0` → ComfyUI with FLUX.2 klein + ACE-Step 1.5;
-# `cuda:1` → MiniMax H3 fl2va (I2VA) Q4_K + Turbo LoRA 8-step via stable-diffusion.cpp (`sd-cli`):
+# `cuda:1` → MiniMax H3 fl2va (I2VA) Q4_K (Q8_0 on the Modal L40S) + Turbo LoRA 8-step via stable-diffusion.cpp (`sd-cli`):
 # the unsloth H3 GGUFs are sd.cpp files that ComfyUI-GGUF cannot load. Its Qwen3-VL-32B text encoder
 # (Q4_K_M 17 GB) runs on the CPU and weights are memory-mapped, as the model card recommends.
 # sd-cli is compiled for the T4 (sm_75) while the models download. Downloads are ~59 GB.
@@ -72,7 +72,8 @@ FLUX = {
 FILE_SWAP = {"4b": {"flux-2-klein-9b-Q8_0.gguf": "flux-2-klein-4b-Q8_0.gguf",
                     "qwen_3_8b_fp8mixed.safetensors": "qwen_3_4b.safetensors"}}.get(FLUX_VARIANT, {})
 
-H3_MODEL = "minimax_h3_fl2va_pruned-Q4_K.gguf"
+# Q8_0 (21.4 GB) is close to the full model; the T4 split layout only has room for Q4_K (11.4 GB).
+H3_MODEL = f"minimax_h3_fl2va_pruned-{'Q8_0' if GPU_LAYOUT == 'single' else 'Q4_K'}.gguf"
 H3_TE = "qwen3vl_32b_minimax_h3-Q4_K_M.gguf"
 H3_LORA = "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
 
@@ -81,7 +82,7 @@ MODELS = [
     *FLUX,
     ("Comfy-Org/Flux-2-Klein-4B", "split_files/vae/flux2-vae.safetensors", "vae"),
     # MiniMax H3 fl2va = first/last-frame image-to-video+audio (the design's I2VA mode)
-    ("unsloth/MiniMax-H3-GGUF", H3_MODEL, "diffusion_models"),  # 10.6 GiB
+    ("unsloth/MiniMax-H3-GGUF", H3_MODEL, "diffusion_models"),  # Q8_0 20 GiB / Q4_K 10.6 GiB
     ("unsloth/MiniMax-H3-GGUF", H3_TE, "text_encoders"),  # 17 GiB
     ("unsloth/MiniMax-H3-GGUF", "vae/minimax_h3_video_vae_fp16.safetensors", "vae"),
     ("unsloth/MiniMax-H3-GGUF", "vae/minimax_h3_audio_vae_fp32.safetensors", "vae"),
@@ -375,8 +376,9 @@ def h3_clip(prompt: str, image: Path, frames: int, seed: int, out: Path) -> None
     """MiniMax H3 I2VA with sd-cli (flags from sd.cpp docs/minimax_h3.md and the unsloth model card)."""
     m, avi = COMFY / "models", out.with_suffix(".avi")
     lora = Path(H3_LORA).stem
-    # On the T4 the 17 GB text encoder runs on the CPU and weights page in and out of VRAM.
-    low_vram = ["--backend", "te=cpu", "--offload-to-cpu"] if GPU_LAYOUT == "split" else []
+    # On the T4 the 17 GB text encoder runs on the CPU. On the L40S, Q8_0 plus the text encoder is
+    # ~40 GB, so weights wait in RAM and only the model that is running sits in VRAM.
+    low_vram = ["--backend", "te=cpu", "--offload-to-cpu"] if GPU_LAYOUT == "split" else ["--offload-to-cpu"]
     cmd = [str(SD_CLI), "-M", "vid_gen",
            "--diffusion-model", str(m / "diffusion_models" / H3_MODEL), "--llm", str(m / "text_encoders" / H3_TE),
            "--vae", str(m / "vae/minimax_h3_video_vae_fp16.safetensors"),

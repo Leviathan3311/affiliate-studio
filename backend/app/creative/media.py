@@ -112,7 +112,13 @@ def _continuity(script: dict, with_product: bool = True) -> str:
     )
     if not with_product:
         one = " The product is not in this shot; hands hold only what the shot describes."
-    motif = f" Recurring motif: {c['motif'].strip()}." if c.get("motif", "").strip() else ""
+    # The motif usually is the product's own light ("the mask's teal glow"): in a shot without the
+    # product it painted the mask onto the face of a woman who was only looking in a mirror.
+    motif = (
+        f" Recurring motif: {c['motif'].strip()}."
+        if with_product and c.get("motif", "").strip()
+        else ""
+    )
     return " Same in every shot. " + "; ".join(parts) + "." + one + motif
 
 

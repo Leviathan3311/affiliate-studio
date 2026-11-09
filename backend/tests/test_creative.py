@@ -636,6 +636,7 @@ def test_shot_camera_grammar_is_normalised_and_reaches_the_prompts():
     assert _camera(s.model_dump()) == "Camera: Close-up. "
     script = {"continuity": {"product": "a white LED mask", "motif": "the teal-green glow"}}
     assert "Recurring motif: the teal-green glow." in _continuity(script)
+    assert "motif" not in _continuity(script, with_product=False)
 
 
 def test_shot_without_the_product_starts_from_a_plate(client, db, spa, gemini, monkeypatch):

@@ -243,7 +243,7 @@ Nên dùng cách này. Khi bạn bấm **Tạo ảnh & video**, API tự bật m
    uvx modal deploy notebooks/modal/growthpilot.py
    ```
 
-4. Tải khoảng 59GB mô hình về ổ lưu của Modal (chạy bằng CPU, làm một lần):
+4. Tải khoảng 70GB mô hình về ổ lưu của Modal (chạy bằng CPU, làm một lần):
 
    ```bash
    uvx modal run notebooks/modal/growthpilot.py::download

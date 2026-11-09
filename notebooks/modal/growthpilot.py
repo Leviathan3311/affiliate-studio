@@ -3,7 +3,7 @@
 One-time setup (from the repo root):
     uvx modal secret create growthpilot-worker GP_API_URL=... MEDIA_WORKER_TOKEN=... HF_TOKEN=...
     uvx modal deploy notebooks/modal/growthpilot.py
-    uvx modal run notebooks/modal/growthpilot.py::download     # ~59 GB of models into a Volume, CPU only
+    uvx modal run notebooks/modal/growthpilot.py::download     # ~70 GB of models into a Volume, CPU only
 
 Then set MODAL_APP=growthpilot in backend/.env. The worker code is notebooks/kaggle/ unchanged; this
 file only bakes ComfyUI and sd-cli (built for the L40S, sm_89) into an image and runs the same loop
@@ -69,7 +69,7 @@ def download() -> None:
     models.commit()
 
 
-@app.function(image=image, gpu="L40S", volumes={"/models": models}, secrets=secrets, cpu=4, memory=32768,
+@app.function(image=image, gpu="L40S", volumes={"/models": models}, secrets=secrets, cpu=4, memory=65536,
               timeout=4 * 3600, max_containers=1)
 def studio() -> None:
     nb1 = _nb1()
