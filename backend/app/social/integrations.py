@@ -4,6 +4,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
+from urllib.parse import urlencode
 
 import httpx
 import jwt
@@ -79,8 +80,17 @@ def meta_connect(ctx: Admin):
 
 
 @router.get("/integrations/meta/callback")
-def meta_callback(db: DB, state: str, code: str | None = None, error: str | None = None):
+def meta_callback(
+    db: DB,
+    state: str = "",
+    code: str | None = None,
+    error: str | None = None,
+    error_message: str | None = None,
+):
     target = f"{get_settings().frontend_url}/app/settings?tab=integrations"
+    if error_message and not code:
+        # Facebook's own error page (e.g. the app's domains are not set) comes back without state.
+        return RedirectResponse(f"{target}&{urlencode({'meta_error': error_message[:300]})}")
     try:
         claims = decode_token(state)
         assert claims.get("purpose") == "meta_oauth"

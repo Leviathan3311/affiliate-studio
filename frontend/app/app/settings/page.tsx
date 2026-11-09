@@ -359,7 +359,7 @@ function IntegrationsTab({ connected, metaError }: { connected: string | null; m
     <div className="max-w-2xl">
       <Panel title="Tài khoản đã kết nối">
         {connected && <p role="status" className="mb-3 text-sm text-positive">Đã kết nối {connected} tài khoản.</p>}
-        {metaError && <p role="alert" className="mb-3 text-sm text-negative">{metaError === "cancelled" ? "Bạn đã huỷ kết nối Facebook." : "Chưa kết nối được Facebook, vui lòng thử lại."}</p>}
+        {metaError && <p role="alert" className="mb-3 text-sm text-negative">{metaError === "cancelled" ? "Bạn đã huỷ kết nối Facebook." : /\s/.test(metaError) ? `Facebook báo lỗi: ${metaError}` : "Chưa kết nối được Facebook, vui lòng thử lại."}</p>}
         {list.loading && <Skeleton rows={2} />}
         {list.data?.length === 0 && <Empty title="Chưa kết nối Facebook Page">Kết nối để nhận tin nhắn Messenger vào hộp thư và đăng bài lên Facebook, Instagram.</Empty>}
         <ul className="divide-y divide-rule">

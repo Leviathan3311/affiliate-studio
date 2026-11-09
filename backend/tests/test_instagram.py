@@ -91,3 +91,16 @@ def test_failed_container_is_not_published(monkeypatch):
     res = meta.publish_instagram("178", "tok", "video", "https://r2/v.mp4", "")
     assert (res.ok, res.error) == (False, "bad aspect ratio")
     assert "media_publish" not in paths
+
+
+def test_facebook_error_page_returns_to_settings_with_its_message(client):
+    r = client.get(
+        "/api/v1/integrations/meta/callback",
+        params={"error_code": "1349048", "error_message": "Không thể tải URL"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 307
+    assert (
+        "tab=integrations&meta_error=Kh%C3%B4ng+th%E1%BB%83+t%E1%BA%A3i+URL"
+        in r.headers["location"]
+    )
