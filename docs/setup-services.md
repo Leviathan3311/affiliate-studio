@@ -105,8 +105,7 @@ Web là trang tĩnh (static export), nên Cloudflare Pages phục vụ miễn ph
    cd frontend && NEXT_PUBLIC_API_URL=https://api.<tên-miền> npm run build && npx wrangler deploy
    ```
 
-3. Thêm `https://app.<tên-miền>` vào `CORS_ORIGINS` trong `backend/.env` rồi khởi động lại API.
-4. Trong `backend/.env`, cho phép web gọi API:
+3. Trong `backend/.env`, cho phép web gọi API:
 
    ```
    FRONTEND_URL=https://<tên-miền>
