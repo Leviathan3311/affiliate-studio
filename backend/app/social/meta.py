@@ -15,8 +15,9 @@ log = logging.getLogger(__name__)
 
 SCOPES = (
     "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement,pages_manage_posts,"
-    "instagram_basic,instagram_content_publish"
+    "instagram_basic,instagram_content_publish,business_management"
 )
+PAGE_FIELDS = "id,name,access_token,instagram_business_account{id,username}"
 
 
 def _graph(path: str) -> str:
@@ -72,16 +73,16 @@ def exchange_code_for_pages(code: str) -> list[dict]:
     )
     r.raise_for_status()
     user_token = r.json()["access_token"]
-    r = httpx.get(
-        _graph("me/accounts"),
-        params={
-            "access_token": user_token,
-            "fields": "id,name,access_token,instagram_business_account{id,username}",
-        },
-        timeout=15,
-    )
-    r.raise_for_status()
-    pages = r.json().get("data", [])
+    pages = _list("me/accounts", user_token, PAGE_FIELDS)
+    if not pages:
+        # Pages owned by a business portfolio only show through that business (business_management).
+        seen = set()
+        for biz in _list("me/businesses", user_token, "id"):
+            for edge in ("owned_pages", "client_pages"):
+                for p in _list(f"{biz['id']}/{edge}", user_token, PAGE_FIELDS):
+                    if p.get("access_token") and p["id"] not in seen:
+                        seen.add(p["id"])
+                        pages.append(p)
     if not pages:  # say why in the log: a Page not ticked in the dialog, or a declined permission
         perms = httpx.get(_graph("me/permissions"), params={"access_token": user_token}, timeout=15)
         if perms.is_success:
@@ -90,6 +91,17 @@ def exchange_code_for_pages(code: str) -> list[dict]:
                 {p["permission"]: p["status"] for p in perms.json().get("data", [])},
             )
     return pages
+
+
+def _list(path: str, token: str, fields: str) -> list[dict]:
+    """One Graph list edge; an edge the token may not read counts as empty."""
+    r = httpx.get(
+        _graph(path), params={"access_token": token, "fields": fields, "limit": 100}, timeout=15
+    )
+    if not r.is_success:
+        log.warning("meta %s: %s", path, r.status_code)
+        return []
+    return r.json().get("data", [])
 
 
 def subscribe_page(page_id: str, page_token: str) -> None:

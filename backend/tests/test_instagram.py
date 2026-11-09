@@ -104,3 +104,22 @@ def test_facebook_error_page_returns_to_settings_with_its_message(client):
         "tab=integrations&meta_error=Kh%C3%B4ng+th%E1%BB%83+t%E1%BA%A3i+URL"
         in r.headers["location"]
     )
+
+
+def test_business_owned_pages_are_found_through_the_business(monkeypatch):
+    def fake_get(url, params, timeout):
+        path = url.split("/v", 1)[1].split("/", 1)[1]
+        body = {
+            "oauth/access_token": {"access_token": "tok"},
+            "me/accounts": {"data": []},
+            "me/businesses": {"data": [{"id": "b1"}]},
+            "b1/owned_pages": {"data": [{"id": "p1", "name": "GrowthPilot", "access_token": "pt"}]},
+            "b1/client_pages": {
+                "data": [{"id": "p1", "name": "GrowthPilot", "access_token": "pt"}]
+            },
+        }[path]
+        return httpx.Response(200, json=body, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(meta.httpx, "get", fake_get)
+    pages = meta.exchange_code_for_pages("code")
+    assert [(p["id"], p["access_token"]) for p in pages] == [("p1", "pt")]
