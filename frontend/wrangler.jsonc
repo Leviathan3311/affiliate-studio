@@ -1,0 +1,7 @@
+// Static web app on Cloudflare Workers assets. Build first with the live API:
+//   NEXT_PUBLIC_API_URL=https://api.<domain> npm run build && npx wrangler deploy
+{
+  "name": "growthpilot-spa",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "./out", "not_found_handling": "404-page" }
+}

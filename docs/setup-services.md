@@ -99,13 +99,13 @@ Web là trang tĩnh (static export), nên Cloudflare Pages phục vụ miễn ph
    cd frontend && npx wrangler login
    ```
 
-2. Build với địa chỉ API thật rồi đẩy lên:
+2. Sửa `routes` trong `frontend/wrangler.jsonc` thành tên miền của web (ví dụ `app.<tên-miền>`), rồi build với địa chỉ API thật và đẩy lên. Wrangler tự tạo bản ghi DNS và chứng chỉ cho tên miền đó:
 
    ```bash
-   cd frontend && NEXT_PUBLIC_API_URL=https://api.<tên-miền> npm run build && npx wrangler pages deploy out --project-name growthpilot
+   cd frontend && NEXT_PUBLIC_API_URL=https://api.<tên-miền> npm run build && npx wrangler deploy
    ```
 
-3. Trong Cloudflare: **Workers & Pages → growthpilot → Custom domains → Set up a domain**, nhập `<tên-miền>`.
+3. Thêm `https://app.<tên-miền>` vào `CORS_ORIGINS` trong `backend/.env` rồi khởi động lại API.
 4. Trong `backend/.env`, cho phép web gọi API:
 
    ```
