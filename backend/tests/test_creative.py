@@ -667,3 +667,12 @@ def test_shot_without_the_product_starts_from_a_plate(client, db, spa, gemini, m
     for prompt in (no["keyframe"]["prompt"], no["prompt"]):  # neither the frame nor the clip
         assert "basalt" not in prompt and "The product is not in this shot" in prompt
     assert "basalt" in yes["prompt"]
+
+
+def test_project_context_accepts_objects_where_strings_were_asked():
+    from app.ai.agents import ProjectContext
+
+    ctx = ProjectContext.model_validate(
+        {"summary": "s", "services": [{"name": "Gói Tự làm", "price": "499.000đ"}, "Phí cài đặt"]}
+    )
+    assert ctx.services == ["Gói Tự làm · 499.000đ", "Phí cài đặt"]

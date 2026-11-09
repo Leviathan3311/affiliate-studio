@@ -104,6 +104,19 @@ class ProjectContext(BaseModel):
     constraints: list[str] = []
     missing: list[str] = []
 
+    @field_validator("services", "key_messages", "constraints", "missing", mode="before")
+    @classmethod
+    def _flatten(cls, v):
+        # Gemini sometimes returns {"name": ..., "price": ...} objects where we asked for strings.
+        if not isinstance(v, list):
+            return v
+        return [
+            " · ".join(str(x) for x in item.values() if x not in (None, ""))
+            if isinstance(item, dict)
+            else item
+            for item in v
+        ]
+
 
 def build_project_context(db: Session, project: Project) -> ProjectContext:
     files, skipped = _input_parts(db, project)
