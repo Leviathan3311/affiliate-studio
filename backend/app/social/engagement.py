@@ -12,6 +12,7 @@ from app.ai.engagement_agent import analyze_conversation
 from app.ai.llm import LLMUnavailable
 from app.core.db import utcnow
 from app.core.observability import trace
+from app.core.plan import is_active
 from app.core.security import decrypt_secret
 from app.models import (
     LEAD_STATUSES,
@@ -208,6 +209,9 @@ def ingest_event(db: Session, event: WebhookEvent, now: datetime | None = None) 
         return
 
     ws = db.get(Workspace, account.workspace_id)
+    if not is_active(ws):  # plan expired: keep the message, no AI and no auto-replies
+        event.status = "done"
+        return
     hours = hours_for(ws)
     if hours.is_active(now):
         conv.needs_ai_at = now

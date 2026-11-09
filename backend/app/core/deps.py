@@ -3,12 +3,13 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.plan import is_active
 from app.core.security import decode_token
 from app.models import AuditLog, User, Workspace, WorkspaceMember
 
@@ -68,7 +69,13 @@ class Ctx:
         return obj
 
 
-def workspace_ctx(db: DB, user: CurrentUser, x_workspace_id: Annotated[uuid.UUID, Header()]) -> Ctx:
+# Reachable after the trial or paid period ends: see the plan, pay, or delete the workspace.
+OPEN_WHEN_EXPIRED = {"/api/v1/billing", "/api/v1/workspace"}
+
+
+def workspace_ctx(
+    request: Request, db: DB, user: CurrentUser, x_workspace_id: Annotated[uuid.UUID, Header()]
+) -> Ctx:
     row = db.execute(
         select(Workspace, WorkspaceMember.role)
         .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
@@ -76,6 +83,11 @@ def workspace_ctx(db: DB, user: CurrentUser, x_workspace_id: Annotated[uuid.UUID
     ).first()
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace not found")
+    if request.url.path not in OPEN_WHEN_EXPIRED and not is_active(row[0]):
+        raise HTTPException(
+            status.HTTP_402_PAYMENT_REQUIRED,
+            "Gói của cửa hàng đã hết hạn, vui lòng gia hạn để dùng tiếp",
+        )
     return Ctx(db=db, user=user, workspace=row[0], role=row[1])
 
 

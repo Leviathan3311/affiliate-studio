@@ -155,7 +155,7 @@ def test_composer_is_deterministic_and_filters_by_modality():
     off = compose(modality="image", task="t", subject="s", style=style, disable_style=True)
     assert "Warm beige" not in off.prompt and off.applied_blocks == []
     # safety comes first and a style block can never remove it
-    assert a.prompt.startswith("Commercial spa advertising image")
+    assert a.prompt.startswith("Commercial advertising image")
 
 
 def test_project_to_kaggle_to_published_post(client, db, spa, gemini):

@@ -68,6 +68,10 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = "/login";
   }
+  if (res.status === 402 && typeof window !== "undefined" && window.location.pathname !== "/app/billing") {
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.href = "/app/billing";
+  }
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => null);
   if (!res.ok) {

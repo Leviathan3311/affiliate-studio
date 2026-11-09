@@ -1,10 +1,10 @@
-"""Spa knowledge for the LLMs (system design v2.3 §3.2): two layers on the same PostgreSQL.
+"""Business knowledge for the LLMs (system design v2.3 §3.2): two layers on the same PostgreSQL.
 
 1. SQL facts — services, prices, offers, hours read straight from the tables. Prices quoted to a
    customer only ever come from here, never from retrieved text.
 2. LightRAG — brand profile, service descriptions, FAQ/policies/contraindications and confirmed
    campaign contexts, indexed into Postgres (PGKV / PGVector / PGTableGraph / PGDocStatus) with
-   one LightRAG workspace per spa. Queried in `hybrid` mode for context only; Qwen/Gemini answer.
+   one LightRAG workspace per business. Queried in `hybrid` mode for context only; Qwen/Gemini answer.
 
 LightRAG is optional at runtime: without Postgres or a Gemini key (tests, local SQLite) and on any
 retrieval error, callers fall back to keyword matching so replying to customers never blocks.
@@ -45,6 +45,11 @@ _PRICE = re.compile(
 # ---------- layer 1: SQL facts ----------
 
 
+def industry_of(brand) -> str:
+    """The business type the AI speaks for, e.g. "spa" or "quán cafe"."""
+    return ((brand.industry if brand else "") or "").strip() or "cửa hàng"
+
+
 def extract_prices(text: str) -> set[int]:
     """VND amounts mentioned in text. Bare numbers < 1000 are ignored (durations, counts)."""
     out = set()
@@ -81,8 +86,9 @@ def sql_facts(db: Session, workspace_id: uuid.UUID) -> tuple[list[str], set[int]
     ).all()
     lines, prices = [], set()
     if brand:
+        label = industry_of(brand)
         lines.append(
-            f"Spa: {brand.name}. Địa chỉ: {brand.address}. Hotline: {brand.hotline}. "
+            f"{label[:1].upper() + label[1:]}: {brand.name}. Địa chỉ: {brand.address}. Hotline: {brand.hotline}. "
             f"Giờ mở cửa: {brand.opening_hours}."
         )
     for s in services:

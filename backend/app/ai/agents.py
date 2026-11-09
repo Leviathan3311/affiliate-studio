@@ -107,7 +107,7 @@ class ProjectContext(BaseModel):
 
 def build_project_context(db: Session, project: Project) -> ProjectContext:
     files, skipped = _input_parts(db, project)
-    system = f"""Bạn là Project Context Agent của GrowthPilot cho spa. Đọc thông tin dự án và mọi tệp \
+    system = f"""Bạn là Project Context Agent của GrowthPilot. Đọc thông tin dự án và mọi tệp \
 đính kèm, tóm tắt thành Project Context. Mỗi dữ kiện giá/ưu đãi/thời hạn phải ghi nguồn (tên tệp hoặc \
 "brand_profile"); không có nguồn thì source="unverified". Liệt kê thông tin còn thiếu để chạy chiến dịch.
 {GUARDRAILS}
@@ -158,7 +158,7 @@ RESEARCH_SCHEMA = """Chỉ trả về JSON: {"research_summary", "target_audienc
 
 
 def _research_system(mode: str, sourcing: str) -> str:
-    return f"""Bạn là Research Planner + Synthesizer cho chiến dịch spa tại Việt Nam. Nghiên cứu khách hàng \
+    return f"""Bạn là Research Planner + Synthesizer cho chiến dịch marketing tại Việt Nam. Nghiên cứu khách hàng \
 mục tiêu, nỗi đau, câu hỏi thường gặp, đối thủ cùng khu vực, xu hướng nội dung Facebook/Reels và cơ hội \
 nội dung cho dự án dưới đây.
 {sourcing}
@@ -335,7 +335,7 @@ nạ phát sáng trên mặt → tháo ra, da mặt rạng rỡ), không nhảy 
 theo tài liệu và cách dùng trên cơ thể, nói rõ CÓ hay KHÔNG có dây đeo, dây cáp, bộ điều khiển (ví \
 dụ "a flexible white silicone full-face LED mask with eye openings, no straps and no cables, rests on \
 the face, glowing teal-green light from the inside"); model hay tự vẽ thêm những thứ này; talent = khách trên hình \
-(tuổi, ngoại hình, tóc, trang phục); setting = phòng, đạo cụ, ánh sáng, tông màu (không ghi tên spa hay \
+(tuổi, ngoại hình, tóc, trang phục); setting = phòng, đạo cụ, ánh sáng, tông màu (không ghi tên thương hiệu hay \
 chữ nào: model sẽ vẽ chữ đó lên hình và viết sai).
 - visual_prompt (tiếng Anh) của MỖI shot: gọi sản phẩm và người bằng đúng cụm từ trong continuity, \
 nói rõ sản phẩm đang ở đâu (trên mặt, trên khay, trong tay), cỡ cảnh (close-up, medium, wide) và việc \
@@ -477,7 +477,7 @@ ACTIONS = {
 }
 ALL_ACTIONS = tuple(dict.fromkeys(a for acts in ACTIONS.values() for a in acts))
 
-_SCRIPT_SYSTEM = """Bạn là trợ lý KỊCH BẢN của dự án quảng cáo spa trong GrowthPilot. Hiểu yêu cầu và \
+_SCRIPT_SYSTEM = """Bạn là trợ lý KỊCH BẢN của dự án quảng cáo trong GrowthPilot. Hiểu yêu cầu và \
 chọn MỘT action:
 - answer: trả lời/tư vấn, không tạo gì.
 - ask: hỏi lại khi yêu cầu mơ hồ hoặc thiếu thông tin bắt buộc.
@@ -492,7 +492,7 @@ Khi người dùng nhờ làm việc gì, chọn action đó NGAY; reply nói vi
 đâu (ví dụ "Đang viết kịch bản gộp, khoảng một phút nữa sẽ có trong danh sách"). Không hứa "sẽ làm" \
 khi action là answer."""
 
-_MEDIA_SYSTEM = """Bạn là trợ lý ẢNH & VIDEO của dự án quảng cáo spa trong GrowthPilot. Hiểu yêu cầu \
+_MEDIA_SYSTEM = """Bạn là trợ lý ẢNH & VIDEO của dự án quảng cáo trong GrowthPilot. Hiểu yêu cầu \
 và chọn MỘT action:
 - answer: nhận xét, giải thích, góp ý về ảnh/video; không tạo gì.
 - ask: hỏi lại khi chưa rõ muốn đổi gì.

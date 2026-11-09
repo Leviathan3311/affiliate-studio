@@ -1,0 +1,121 @@
+"use client";
+
+import { useState } from "react";
+import { Button, Dialog, Empty, ErrorNote, Field, PageTitle, Panel, Pill, Skeleton } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace";
+import { api, ApiError, useApi } from "@/lib/api";
+import { vnd } from "@/lib/format";
+import type { AdminWorkspace, Billing } from "@/lib/types";
+
+const date = (iso: string) => new Date(iso).toLocaleDateString("vi-VN");
+
+export default function AdminPage() {
+  const { me } = useWorkspace();
+  const [q, setQ] = useState("");
+  const list = useApi<AdminWorkspace[]>(me.is_platform_admin ? `/admin/workspaces?q=${encodeURIComponent(q)}` : null);
+  const price = useApi<Billing>("/billing").data?.price_vnd ?? 0;
+  const [paying, setPaying] = useState<AdminWorkspace | null>(null);
+
+  if (!me.is_platform_admin) return <Empty title="Trang này chỉ dành cho quản trị GrowthPilot" />;
+  return (
+    <>
+      <PageTitle title="Quản trị" sub="Tất cả cửa hàng dùng GrowthPilot. Khi tiền chuyển khoản về, tìm theo nội dung (GP …) rồi gia hạn." />
+      <Panel>
+        <div className="mb-4 max-w-sm">
+          <Field label="Tìm" name="q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Mã GP, tên cửa hàng hoặc email" />
+        </div>
+        {list.error && <ErrorNote error={list.error} onRetry={list.reload} />}
+        {!list.data ? (
+          <Skeleton rows={5} />
+        ) : !list.data.length ? (
+          <Empty title="Không có cửa hàng nào khớp" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="text-xs text-muted">
+                <tr>
+                  <th className="py-2 pr-3 font-medium">Cửa hàng</th>
+                  <th className="py-2 pr-3 font-medium">Mã chuyển khoản</th>
+                  <th className="py-2 pr-3 font-medium">Tạo ngày</th>
+                  <th className="py-2 pr-3 font-medium">Dùng đến</th>
+                  <th className="py-2 pr-3 text-right font-medium">Đã trả</th>
+                  <th className="py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {list.data.map((w) => (
+                  <tr key={w.id} className="border-t border-rule">
+                    <td className="py-2.5 pr-3">
+                      <p className="font-medium">{w.name}</p>
+                      <p className="text-xs text-muted">{w.owner_email}</p>
+                    </td>
+                    <td className="py-2.5 pr-3 font-mono">{w.transfer_code}</td>
+                    <td className="py-2.5 pr-3">{date(w.created_at)}</td>
+                    <td className="py-2.5 pr-3">
+                      <Pill tone={w.active ? "positive" : "negative"}>{date(w.access_until)}</Pill>
+                    </td>
+                    <td className="py-2.5 pr-3 text-right tabular-nums">{vnd(w.paid_total_vnd)}</td>
+                    <td className="py-2.5 text-right">
+                      <Button onClick={() => setPaying(w)}>Gia hạn</Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+      {paying && <PayDialog ws={paying} price={price} onClose={() => setPaying(null)} onDone={list.reload} />}
+    </>
+  );
+}
+
+function PayDialog({ ws, price, onClose, onDone }: { ws: AdminWorkspace; price: number; onClose: () => void; onDone: () => void }) {
+  const [months, setMonths] = useState(1);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <Dialog
+      title={`Gia hạn ${ws.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Huỷ</Button>
+          <Button variant="primary" form="pay" type="submit" busy={busy}>
+            Xác nhận đã nhận tiền
+          </Button>
+        </>
+      }
+    >
+      <form
+        id="pay"
+        className="flex flex-col gap-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          setBusy(true);
+          setError(null);
+          try {
+            await api(`/admin/workspaces/${ws.id}/payments`, {
+              method: "POST",
+              json: { months, amount_vnd: Number(f.get("amount_vnd")), note: f.get("note") },
+            });
+            onDone();
+            onClose();
+          } catch (err) {
+            setError(err as ApiError);
+            setBusy(false);
+          }
+        }}
+      >
+        {error && <ErrorNote error={error} />}
+        <p className="text-sm text-muted">
+          Chỉ bấm xác nhận khi tiền với nội dung <b className="text-ink">{ws.transfer_code}</b> đã về tài khoản.
+        </p>
+        <Field label="Số tháng" name="months" type="number" min={1} max={36} value={months} onChange={(e) => setMonths(Number(e.target.value) || 1)} />
+        <Field label="Số tiền đã nhận (đ)" name="amount_vnd" type="number" min={0} key={months} defaultValue={price * months} />
+        <Field label="Ghi chú" name="note" placeholder="Ví dụ: VCB 09/11, mã giao dịch…" />
+      </form>
+    </Dialog>
+  );
+}

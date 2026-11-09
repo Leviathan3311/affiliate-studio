@@ -55,7 +55,7 @@ def _upsert_page(
     )
     if acc and acc.workspace_id != workspace_id:
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "Tài khoản này đã được kết nối với một spa khác"
+            status.HTTP_409_CONFLICT, "Tài khoản này đã được kết nối với một cửa hàng khác"
         )
     if acc is None:
         acc = SocialAccount(

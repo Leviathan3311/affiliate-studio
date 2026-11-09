@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.deps import DB, CurrentUser
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.models import User, Workspace, WorkspaceMember
+from app.workspace.billing import is_platform_admin
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -52,6 +53,7 @@ class Me(BaseModel):
     email: str
     full_name: str
     workspaces: list[WorkspaceRef]
+    is_platform_admin: bool = False
 
 
 @router.post("/register", response_model=Token, status_code=201)
@@ -133,4 +135,5 @@ def me(user: CurrentUser, db: DB):
         email=user.email,
         full_name=user.full_name,
         workspaces=[WorkspaceRef(id=r.id, name=r.name, role=r.role) for r in rows],
+        is_platform_admin=is_platform_admin(user),
     )

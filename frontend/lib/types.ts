@@ -7,6 +7,25 @@ export interface Me {
   email: string;
   full_name: string;
   workspaces: { id: string; name: string; role: Role }[];
+  is_platform_admin: boolean;
+}
+
+export interface Billing {
+  status: "trial" | "active" | "expired";
+  access_until: string;
+  price_vnd: number;
+  transfer: { bank_bin: string; account: string; account_name: string; content: string; qr_url: string | null };
+}
+
+export interface AdminWorkspace {
+  id: string;
+  name: string;
+  owner_email: string;
+  created_at: string;
+  access_until: string;
+  active: boolean;
+  transfer_code: string;
+  paid_total_vnd: number;
 }
 
 export interface Workspace {
@@ -30,6 +49,7 @@ export interface Member {
 
 export interface Brand {
   name: string;
+  industry: string;
   tone_of_voice: string;
   hotline: string;
   address: string;

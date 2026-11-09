@@ -66,7 +66,7 @@ export function UploadZone({ projectId, onUploaded, compact }: { projectId: stri
         <Upload className="size-5 flex-none text-muted" aria-hidden />
         <div className="min-w-48 flex-1">
           <p className="text-sm font-medium">Kéo thả tài liệu vào đây</p>
-          <p className="text-xs text-muted">Brief, bảng giá (PDF, DOCX, TXT), ảnh sản phẩm, logo, video spa · AI sẽ tự đọc</p>
+          <p className="text-xs text-muted">Brief, bảng giá (PDF, DOCX, TXT), ảnh sản phẩm, logo, video cửa hàng · AI sẽ tự đọc</p>
         </div>
         <Button onClick={() => picker.current?.click()} busy={uploading.length > 0}>Chọn tệp</Button>
         <input ref={picker} type="file" multiple accept={ACCEPT} className="sr-only" aria-label="Chọn tệp tải lên"

@@ -50,7 +50,7 @@ export function StyleLibrary() {
 
   return (
     <div className="max-w-5xl space-y-6">
-      <Panel title="Phong cách mặc định của spa">
+      <Panel title="Phong cách mặc định của cửa hàng">
         <p className="mb-4 text-sm text-muted">Áp dụng cho mọi ảnh, video và nhạc nền AI tạo. Mỗi dự án có thể chọn phong cách riêng.</p>
         {error && <div className="mb-3"><ErrorNote error={error} /></div>}
         <div className="grid gap-4 sm:grid-cols-3">

@@ -54,6 +54,8 @@ class Workspace(IdMixin, Base):
     active_end: Mapped[str] = mapped_column(String(5), default="22:00")
     reply_mode: Mapped[str] = mapped_column(String(16), default="suggest")  # suggest | auto
     auto_reply_min_confidence: Mapped[float] = mapped_column(default=0.85)
+    # Billing: open while now < max(created_at + trial_days, paid_until).
+    paid_until: Mapped[datetime | None]
     quiet_hours_template: Mapped[str] = mapped_column(
         Text,
         default=(
@@ -61,6 +63,19 @@ class Workspace(IdMixin, Base):
             "Đầu giờ sáng mai ({active_start}) bên em sẽ gửi chi tiết liệu trình và ưu đãi "
             "cho anh/chị nhé ạ!"
         ),
+    )
+
+
+class Payment(IdMixin, Base):
+    """A bank transfer the platform admin confirmed; each one extends paid_until."""
+
+    __tablename__ = "payments"
+    workspace_id: Mapped[uuid.UUID] = ws_fk()
+    months: Mapped[int]
+    amount_vnd: Mapped[int]
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
     )
 
 
@@ -79,6 +94,8 @@ class Brand(IdMixin, Base):
         ForeignKey("workspaces.id", ondelete="CASCADE"), unique=True
     )
     name: Mapped[str] = mapped_column(String(200))
+    # Free text, e.g. "Spa", "Tiệm nail", "Quán cafe": who the AI speaks for. Empty = "cửa hàng".
+    industry: Mapped[str] = mapped_column(String(100), default="")
     tone_of_voice: Mapped[str] = mapped_column(Text, default="")
     hotline: Mapped[str] = mapped_column(String(32), default="")
     address: Mapped[str] = mapped_column(Text, default="")

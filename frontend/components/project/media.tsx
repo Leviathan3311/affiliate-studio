@@ -10,7 +10,7 @@ import { DeleteButton, statusTone, Thumb } from "./library";
 
 const JOB_NAME = { studio: "Ảnh & video quảng cáo", shorts: "Cắt Shorts" } as const;
 
-/** The worker's stage codes in words a spa owner reads (no model or machine names). */
+/** The worker's stage codes in words a shop owner reads (no model or machine names). */
 export function stageLabel(j: MediaJob): string {
   if (j.status === "preparing") return "Đang tạo giọng đọc";
   if (j.status === "queued") return "Đang chờ đến lượt";
@@ -93,7 +93,7 @@ export function MediaSection({
       {kinds.includes("short") && <ShortsLauncher project={project} onChanged={onChanged} />}
       {!shown.length && (
         <Empty title={kinds.includes("short") ? "Chưa có Shorts" : "Chưa có ảnh/video"}>
-          {kinds.includes("short") ? "Chọn video quảng cáo hoặc video spa tự quay để cắt thành Reels 9:16." : "Ở mục Kịch bản, bấm “Chọn bản này” rồi “Tạo ảnh & video”."}
+          {kinds.includes("short") ? "Chọn video quảng cáo hoặc video cửa hàng tự quay để cắt thành Reels 9:16." : "Ở mục Kịch bản, bấm “Chọn bản này” rồi “Tạo ảnh & video”."}
         </Empty>
       )}
       <ul className="grid grid-cols-2 gap-[14px] md:grid-cols-3 2xl:grid-cols-4">
@@ -164,7 +164,7 @@ function ShortsLauncher({ project, onChanged }: { project: Project; onChanged: (
 
   return (
     <Panel title="Cắt video thành Shorts 9:16">
-      <p className="mb-4 text-sm text-muted">Video quảng cáo AI tạo đã tự có Shorts (mỗi Short một lợi ích). Ở đây cắt video dài của spa: AI nghe lời thoại, chọn 2–5 đoạn 15–30 giây cuốn nhất, cắt dọc theo khuôn mặt và thêm phụ đề.</p>
+      <p className="mb-4 text-sm text-muted">Video quảng cáo AI tạo đã tự có Shorts (mỗi Short một lợi ích). Ở đây cắt video dài của cửa hàng: AI nghe lời thoại, chọn 2–5 đoạn 15–30 giây cuốn nhất, cắt dọc theo khuôn mặt và thêm phụ đề.</p>
       <div className="grid gap-3 sm:grid-cols-[1fr_120px_1fr_auto] sm:items-end">
         <label className="flex flex-col gap-1.5 text-sm font-medium">Video nguồn
           <select value={source} onChange={(e) => setSource(e.target.value)} className="h-9 rounded-[var(--radius-control)] border border-control px-3 font-normal">

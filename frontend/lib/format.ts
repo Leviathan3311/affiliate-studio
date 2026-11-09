@@ -60,7 +60,7 @@ export const BOOKING: Record<BookingStatus, string> = {
 };
 
 export const ROLE: Record<Role, string> = {
-  owner: "Chủ spa",
+  owner: "Chủ cửa hàng",
   admin: "Quản trị",
   marketing: "Marketing",
   sales: "Tư vấn / Sales",

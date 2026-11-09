@@ -8,7 +8,7 @@ export default function DataDeletionPage() {
     <LegalPage title="Hướng dẫn xoá dữ liệu">
       <section>
         <p>
-          Nếu bạn đã nhắn tin cho Fanpage của một spa dùng GrowthPilot AI, bạn có thể yêu cầu xoá toàn bộ dữ liệu của mình
+          Nếu bạn đã nhắn tin cho Fanpage của một cửa hàng dùng GrowthPilot AI, bạn có thể yêu cầu xoá toàn bộ dữ liệu của mình
           bất cứ lúc nào.
         </p>
       </section>
@@ -17,7 +17,7 @@ export default function DataDeletionPage() {
         <h2>Cách yêu cầu</h2>
         <ul>
           <li>Gửi email tới <Mail /> với tiêu đề “Xoá dữ liệu”.</li>
-          <li>Ghi tên Facebook bạn dùng để nhắn tin và tên Fanpage (spa) bạn đã nhắn.</li>
+          <li>Ghi tên Facebook bạn dùng để nhắn tin và tên Fanpage (cửa hàng) bạn đã nhắn.</li>
           <li>Nếu đã đặt lịch, ghi thêm số điện thoại đã dùng khi đặt để chúng tôi tìm đúng hồ sơ.</li>
         </ul>
       </section>

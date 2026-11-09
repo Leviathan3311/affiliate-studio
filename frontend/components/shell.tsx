@@ -1,12 +1,12 @@
 "use client";
 
-import { Bell, CalendarClock, CalendarDays, Check, ChevronsUpDown, FolderKanban, Inbox, LayoutGrid, LogOut, Menu, Plus, Settings, Users, X } from "lucide-react";
+import { Bell, CalendarClock, CalendarDays, Check, ChevronsUpDown, CreditCard, FolderKanban, Inbox, LayoutGrid, LogOut, Menu, Plus, Settings, Shield, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { api, session, useApi } from "@/lib/api";
+import { api, session, useApi, useNow } from "@/lib/api";
 import { ROLE } from "@/lib/format";
-import type { Notification, Overview } from "@/lib/types";
+import type { Billing, Notification, Overview } from "@/lib/types";
 import { Initials } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -80,7 +80,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <p className="truncate text-sm font-semibold">{workspace.name}</p>
             <p className="text-xs text-muted">GrowthPilot AI</p>
           </div>
-          <ChevronsUpDown className="size-4 flex-none text-muted" strokeWidth={1.6} aria-label="Đổi spa" />
+          <ChevronsUpDown className="size-4 flex-none text-muted" strokeWidth={1.6} aria-label="Đổi cửa hàng" />
         </summary>
         <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-[var(--radius-control)] border border-border bg-surface p-1 shadow-lg shadow-black/40">
           {me.workspaces.map((w) => (
@@ -88,7 +88,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               key={w.id}
               onClick={() => {
                 session.setWorkspace(w.id);
-                // Full reload on purpose: no screen keeps the old spa's cached data.
+                // Full reload on purpose: no screen keeps the old workspace's cached data.
                 // eslint-disable-next-line @next/next/no-location-assign-relative-destination
                 window.location.href = "/app";
               }}
@@ -104,7 +104,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             onClick={onNavigate}
             className="mt-1 flex items-center gap-2 border-t border-border px-2 pb-1.5 pt-2.5 text-sm text-muted hover:text-ink"
           >
-            <Plus className="size-4" strokeWidth={1.6} /> Tạo spa mới
+            <Plus className="size-4" strokeWidth={1.6} /> Tạo cửa hàng mới
           </Link>
         </div>
       </details>
@@ -119,6 +119,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         ))}
       </div>
       <div className="mt-auto flex flex-col gap-0.5">
+        {me.is_platform_admin && <NavLink href="/app/admin" label="Quản trị" icon={Shield} onNavigate={onNavigate} />}
+        {can("admin") && <NavLink href="/app/billing" label="Gói & thanh toán" icon={CreditCard} onNavigate={onNavigate} />}
         <NavLink href="/app/settings" label="Cài đặt" icon={Settings} onNavigate={onNavigate} />
         <div className="mt-3 flex items-center gap-2.5 px-1.5">
           <Initials name={me.full_name || me.email} size={28} />
@@ -139,6 +141,26 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       </div>
     </nav>
+  );
+}
+
+/** Days left in the trial or paid period; only shown when it matters (trial, or under a week). */
+function PlanPill() {
+  const { data } = useApi<Billing>("/billing");
+  const now = useNow(60000);
+  if (!data) return null;
+  const days = Math.ceil((new Date(data.access_until).getTime() - now) / 86400000);
+  if (data.status === "active" && days > 7) return null;
+  const text = data.status === "expired" ? "Đã hết hạn" : `${data.status === "trial" ? "Dùng thử" : "Còn"}: ${days} ngày`;
+  return (
+    <Link
+      href="/app/billing"
+      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+        data.status === "expired" || days <= 3 ? "bg-[var(--pill-negative-bg)] text-[var(--pill-negative-ink)]" : "bg-raised text-ink"
+      }`}
+    >
+      {text}
+    </Link>
   );
 }
 
@@ -220,7 +242,10 @@ export function Shell({ children }: { children: ReactNode }) {
               <span className="hidden sm:inline"> · {workspace.reply_mode === "auto" ? "Tự trả lời" : "Chỉ gợi ý"}</span>
             </span>
           </div>
-          <Notifications />
+          <div className="flex items-center gap-2">
+            <PlanPill />
+            <Notifications />
+          </div>
         </header>
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:border-l lg:border-t lg:border-rule lg:rounded-tl-[var(--radius-sheet)]">
           {children}

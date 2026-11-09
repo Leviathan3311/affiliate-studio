@@ -20,6 +20,7 @@ class ORM(BaseModel):
 
 class BrandIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    industry: str = Field(default="", max_length=100)
     tone_of_voice: str = Field(default="", max_length=2000)
     hotline: str = Field(default="", max_length=32)
     address: str = Field(default="", max_length=1000)

@@ -9,7 +9,7 @@ export default function PrivacyPage() {
     <LegalPage title="Chính sách quyền riêng tư">
       <section>
         <p>
-          GrowthPilot AI là phần mềm giúp spa trả lời tin nhắn Facebook Messenger, quản lý khách hàng, lịch hẹn và
+          GrowthPilot AI là phần mềm giúp cửa hàng trả lời tin nhắn Facebook Messenger, quản lý khách hàng, lịch hẹn và
           tạo nội dung quảng cáo. Trang này giải thích chúng tôi ({OPERATOR}) thu thập dữ liệu gì, dùng để làm gì và
           bạn có quyền gì với dữ liệu của mình.
         </p>
@@ -17,23 +17,23 @@ export default function PrivacyPage() {
 
       <section>
         <h2>1. Dữ liệu chúng tôi thu thập</h2>
-        <p><strong>Khi bạn nhắn tin cho Fanpage của một spa dùng GrowthPilot:</strong></p>
+        <p><strong>Khi bạn nhắn tin cho Fanpage của một cửa hàng dùng GrowthPilot:</strong></p>
         <ul>
           <li>Tên hiển thị và mã định danh Facebook mà Facebook cấp cho Page (không phải mật khẩu hay tài khoản của bạn).</li>
           <li>Nội dung tin nhắn bạn gửi cho Page và tin Page trả lời bạn.</li>
-          <li>Số điện thoại, email chỉ khi bạn tự cung cấp trong tin nhắn hoặc cho nhân viên spa.</li>
-          <li>Lịch hẹn bạn đặt với spa và ghi chú chăm sóc do nhân viên spa nhập.</li>
+          <li>Số điện thoại, email chỉ khi bạn tự cung cấp trong tin nhắn hoặc cho nhân viên cửa hàng.</li>
+          <li>Lịch hẹn bạn đặt với cửa hàng và ghi chú chăm sóc do nhân viên cửa hàng nhập.</li>
         </ul>
-        <p><strong>Với nhân viên và chủ spa dùng GrowthPilot:</strong> họ tên, email đăng nhập, thông tin spa (dịch vụ, giá, chi nhánh) và tài liệu, hình ảnh, video họ tải lên.</p>
+        <p><strong>Với nhân viên và chủ cửa hàng dùng GrowthPilot:</strong> họ tên, email đăng nhập, thông tin cửa hàng (dịch vụ, giá, chi nhánh) và tài liệu, hình ảnh, video họ tải lên.</p>
       </section>
 
       <section>
         <h2>2. Chúng tôi dùng dữ liệu để làm gì</h2>
         <ul>
-          <li>Hiển thị tin nhắn của bạn cho nhân viên spa để họ trả lời.</li>
-          <li>Dùng AI để hiểu nhu cầu (hỏi giá, đặt lịch…) và gợi ý câu trả lời dựa trên thông tin dịch vụ, giá mà spa đã nhập.</li>
+          <li>Hiển thị tin nhắn của bạn cho nhân viên cửa hàng để họ trả lời.</li>
+          <li>Dùng AI để hiểu nhu cầu (hỏi giá, đặt lịch…) và gợi ý câu trả lời dựa trên thông tin dịch vụ, giá mà cửa hàng đã nhập.</li>
           <li>Ghi nhận và nhắc lịch hẹn.</li>
-          <li>Đăng bài lên Fanpage của spa khi spa chọn đăng.</li>
+          <li>Đăng bài lên Fanpage của cửa hàng khi cửa hàng chọn đăng.</li>
         </ul>
         <p>Chúng tôi không bán dữ liệu, không dùng dữ liệu của bạn để quảng cáo cho bên khác và không gửi tin quảng cáo nếu bạn chưa đồng ý.</p>
       </section>
@@ -53,11 +53,11 @@ export default function PrivacyPage() {
       <section>
         <h2>4. Lưu trữ và bảo mật</h2>
         <p>
-          Dữ liệu được truyền qua kết nối mã hoá (HTTPS). Mã truy cập Fanpage được mã hoá khi lưu. Mỗi spa chỉ xem được
-          dữ liệu của chính spa đó, và quyền của từng nhân viên được giới hạn theo vai trò.
+          Dữ liệu được truyền qua kết nối mã hoá (HTTPS). Mã truy cập Fanpage được mã hoá khi lưu. Mỗi cửa hàng chỉ xem được
+          dữ liệu của chính cửa hàng đó, và quyền của từng nhân viên được giới hạn theo vai trò.
         </p>
         <p>
-          Chúng tôi giữ dữ liệu trong thời gian spa còn sử dụng dịch vụ. Dự án bị xoá được giữ trong thùng rác 30 ngày rồi xoá hẳn.
+          Chúng tôi giữ dữ liệu trong thời gian cửa hàng còn sử dụng dịch vụ. Dự án bị xoá được giữ trong thùng rác 30 ngày rồi xoá hẳn.
         </p>
       </section>
 
@@ -78,9 +78,9 @@ export default function PrivacyPage() {
         <h2 className="text-ink">English summary</h2>
         <p>
           GrowthPilot AI helps spas answer Facebook Messenger messages and manage customers and bookings. When you message
-          a spa&apos;s Page we store your Facebook display name, page-scoped ID, the messages exchanged, and any phone number or
-          email you choose to share. We use them only to let the spa reply (with AI-suggested answers), manage your bookings and
-          publish the spa&apos;s own posts. Processors: Meta, Google Gemini, Groq (phone numbers and emails are masked before AI
+          a business&apos;s Page we store your Facebook display name, page-scoped ID, the messages exchanged, and any phone number or
+          email you choose to share. We use them only to let the business reply (with AI-suggested answers), manage your bookings and
+          publish the business&apos;s own posts. Processors: Meta, Google Gemini, Groq (phone numbers and emails are masked before AI
           processing), Supabase, Cloudflare and Langfuse. We never sell data. Reply “stop” to the Page to stop automated
           messages. To access or delete your data, see <Link href="/data-deletion" className="underline">Data deletion</Link> or
           email <Mail />.

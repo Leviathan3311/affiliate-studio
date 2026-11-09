@@ -366,7 +366,7 @@ function StyleOverride({ project }: { project: Project }) {
               <label htmlFor={`style-${m}`} className="text-sm text-faint">{{ image: "Ảnh", video: "Video", audio: "Nhạc nền" }[m]}</label>
               <select id={`style-${m}`} value={value} disabled={!can("admin", "marketing")} onChange={(ev) => set(m, ev.target.value)}
                 className="h-9 min-w-56 rounded-[var(--radius-control)] border border-control px-3 text-sm">
-                <option value="inherit">Mặc định ({e?.source !== "project" ? (e?.pack_name ?? "không") : "của spa"})</option>
+                <option value="inherit">Mặc định ({e?.source !== "project" ? (e?.pack_name ?? "không") : "của cửa hàng"})</option>
                 {packs.data?.map((pk) => <option key={pk.id} value={pk.id}>{pk.name}</option>)}
                 <option value="off">Không dùng phong cách</option>
               </select>

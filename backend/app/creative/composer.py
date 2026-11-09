@@ -43,9 +43,9 @@ ADAPTERS: dict[str, dict] = {
 DEFAULT_MODEL = {"image": "flux2-klein", "video": "minimax-h3", "audio": "ace-step-1.5"}
 
 SAFETY = {
-    "image": "Commercial spa advertising image. No fake before/after comparison, no medical or "
+    "image": "Commercial advertising image for a local business. No fake before/after comparison, no medical or "
     "treatment-result claims, no nudity, no fake logos or watermarks, legible text only if requested.",
-    "video": "Commercial spa advertising video. No fake before/after, no medical or result claims, "
+    "video": "Commercial advertising video for a local business. No fake before/after, no medical or result claims, "
     "no nudity; natural motion, no morphing faces or hands.",
     "audio": "Instrumental commercial background music, no vocals, no copyrighted melodies.",
 }

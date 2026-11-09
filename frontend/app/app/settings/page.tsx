@@ -11,14 +11,14 @@ import type { Branch, Brand, Knowledge, Member, Role, Service, SocialAccount } f
 
 const TABS = [
   { id: "brand", label: "Thương hiệu" },
-  { id: "services", label: "Dịch vụ & giá" },
+  { id: "services", label: "Sản phẩm, dịch vụ & giá" },
   { id: "faq", label: "Câu hỏi thường gặp" },
   { id: "branches", label: "Chi nhánh" },
   { id: "styles", label: "Phong cách hình ảnh" },
   { id: "integrations", label: "Facebook & Instagram" },
   { id: "ai", label: "Giờ trực AI" },
   { id: "members", label: "Thành viên" },
-  { id: "delete", label: "Xoá spa" },
+  { id: "delete", label: "Xoá cửa hàng" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -120,7 +120,15 @@ function BrandTab() {
       noValidate
     >
       <fieldset disabled={!can("admin", "marketing")} className="contents">
-        <Field label="Tên spa" name="name" defaultValue={data.name} error={s.fe.name} />
+        <Field label="Tên cửa hàng" name="name" defaultValue={data.name} error={s.fe.name} />
+        <Field
+          label="Loại hình kinh doanh"
+          name="industry"
+          defaultValue={data.industry}
+          placeholder="Spa, tiệm nail, quán cafe, shop thời trang…"
+          hint="AI dùng để xưng hô khi tư vấn và viết quảng cáo đúng ngành"
+          error={s.fe.industry}
+        />
         <Field label="Hotline" name="hotline" defaultValue={data.hotline} inputMode="tel" />
         <Field label="Địa chỉ" name="address" defaultValue={data.address} />
         <Field label="Giờ mở cửa" name="opening_hours" defaultValue={data.opening_hours} placeholder="9:00 – 20:00, cả tuần" />
@@ -128,7 +136,7 @@ function BrandTab() {
           <Field label="Giới thiệu ngắn" name="description" textarea defaultValue={data.description} />
         </div>
         <Field label="Giọng điệu khi tư vấn" name="tone_of_voice" textarea defaultValue={data.tone_of_voice} hint="Ví dụ: gọi khách là chị/anh, xưng em, nhẹ nhàng" />
-        <Field label="Không được nói" name="forbidden_claims" textarea defaultValue={data.forbidden_claims} hint="Ví dụ: không hứa trị dứt điểm mụn, không so sánh với spa khác" />
+        <Field label="Không được nói" name="forbidden_claims" textarea defaultValue={data.forbidden_claims} hint="Ví dụ: không hứa trị dứt điểm mụn, không so sánh với cửa hàng khác" />
         <SaveRow {...s} />
       </fieldset>
     </form>
@@ -432,7 +440,7 @@ function AiTab() {
             name="quiet_hours_template"
             textarea
             defaultValue={workspace.quiet_hours_template}
-            hint="Gõ {brand} để chèn tên spa, {active_start} để chèn giờ AI bắt đầu trực. Mỗi khách nhận tối đa 1 tin mỗi đêm."
+            hint="Gõ {brand} để chèn tên cửa hàng, {active_start} để chèn giờ AI bắt đầu trực. Mỗi khách nhận tối đa 1 tin mỗi đêm."
             error={s.fe.quiet_hours_template}
           />
         </div>
@@ -514,8 +522,8 @@ function DeleteTab() {
   return (
     <Panel title={`Xoá ${workspace.name}`} className="max-w-2xl">
       <p className="text-sm">
-        Xoá vĩnh viễn spa này cùng toàn bộ dữ liệu của nó: khách hàng, hội thoại, lịch hẹn, dịch vụ và giá, dự án, ảnh,
-        video và các Page đã kết nối. <b>Không khôi phục được.</b> Các spa khác của bạn không bị ảnh hưởng.
+        Xoá vĩnh viễn cửa hàng này cùng toàn bộ dữ liệu của nó: khách hàng, hội thoại, lịch hẹn, dịch vụ và giá, dự án, ảnh,
+        video và các Page đã kết nối. <b>Không khôi phục được.</b> Các cửa hàng khác của bạn không bị ảnh hưởng.
       </p>
       <form
         className="mt-5 flex flex-col gap-4"

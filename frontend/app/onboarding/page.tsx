@@ -29,12 +29,19 @@ export default function Onboarding() {
   }
 
   return (
-    <AuthCard title="Thông tin spa của bạn" sub="Mỗi spa có dữ liệu riêng; bạn có thể mời nhân viên sau.">
+    <AuthCard title="Thông tin cửa hàng của bạn" sub="Mỗi cửa hàng có dữ liệu riêng; bạn có thể mời nhân viên sau.">
       <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
         {error && !error.fields.name && <ErrorNote error={error} />}
-        <Field label="Tên spa" name="name" required placeholder="Ví dụ: Lotus Spa Quận 3" error={error?.fields.name} />
+        <Field label="Tên cửa hàng" name="name" required placeholder="Ví dụ: Mây Nail Quận 3" error={error?.fields.name} />
+        <Field
+          label="Loại hình kinh doanh"
+          name="industry"
+          placeholder="Spa, tiệm nail, quán cafe, shop thời trang…"
+          hint="Để AI tư vấn và viết quảng cáo đúng ngành của bạn"
+          error={error?.fields.industry}
+        />
         <Button variant="primary" type="submit" busy={busy} className="h-10">
-          Tạo workspace
+          Bắt đầu dùng thử 14 ngày
         </Button>
         <Link href="/app" className="text-center text-sm text-muted underline">
           Quay lại

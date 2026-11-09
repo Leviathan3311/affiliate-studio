@@ -180,7 +180,7 @@ def patch_conversation(conv_id: uuid.UUID, body: ConversationPatch, ctx: Sales):
         )
     ):
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "Người được giao không phải thành viên của spa"
+            status.HTTP_400_BAD_REQUEST, "Người được giao không phải thành viên của cửa hàng"
         )
     for k, v in changes.items():
         setattr(conv, k, v)

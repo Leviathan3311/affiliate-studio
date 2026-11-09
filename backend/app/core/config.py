@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     api_public_url: str = "http://localhost:8000"
 
+    # Billing (manual bank transfer, confirmed by a platform admin)
+    trial_days: int = 14
+    plan_price_vnd: int = 499000
+    bank_bin: str = ""  # NAPAS BIN, e.g. 970436 = Vietcombank
+    bank_account: str = ""
+    bank_account_name: str = ""
+    platform_admin_emails: list[str] = []
+
     # Outgoing email (password reset). Gmail: smtp.gmail.com + an App Password.
     smtp_host: str = ""
     smtp_port: int = 587
@@ -54,7 +62,7 @@ class Settings(BaseSettings):
     # Vietnamese voiceover per shot (app/ai/speech.py); the first model that answers is used
     gemini_tts_models: list[str] = ["gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"]
     gemini_tts_voice: str = "Sulafat"  # "warm"
-    gemini_tts_style: str = "warm, calm and gentle, like a spa consultant"
+    gemini_tts_style: str = "warm, calm and gentle, like a friendly shop consultant"
 
     # LightRAG knowledge layer (system design §3.2); needs Postgres + Gemini, else keyword fallback
     lightrag_enabled: bool = True

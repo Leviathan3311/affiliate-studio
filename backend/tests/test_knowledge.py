@@ -86,9 +86,14 @@ def test_build_context_prices_come_from_sql_not_retrieval(client, db, monkeypatc
 
 def test_prompt_template_renders_langfuse_placeholders():
     out = render(
-        SYSTEM_PROMPT, brand="Lotus", tone="nhẹ nhàng", forbidden="không hứa", intents="a|b"
+        SYSTEM_PROMPT,
+        brand="Lotus",
+        industry="tiệm nail",
+        tone="nhẹ nhàng",
+        forbidden="không hứa",
+        intents="a|b",
     )
-    assert '"Lotus"' in out and "{{" not in out and '{"intent": one of a|b' in out
+    assert 'của tiệm nail "Lotus"' in out and "{{" not in out and '{"intent": one of a|b' in out
 
 
 def test_failed_extraction_is_retried(client, db, fake_rag, monkeypatch):

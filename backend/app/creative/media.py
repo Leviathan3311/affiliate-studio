@@ -140,7 +140,7 @@ def create_studio_job(
         m: resolve_style(db, project.workspace_id, project.id, m)
         for m in ("image", "video", "audio")
     }
-    # No brand facts in any picture prompt: the models painted the spa name onto the set and
+    # No brand facts in any picture prompt: the models painted the brand name onto the set and
     # misspelled it. The thumbnail headline is drawn by the notebook in a real Vietnamese font.
     common = {"extra_instruction": extra_instruction, "disable_style": disable_style}
     shots = script["shots"][:MAX_SHOTS]
@@ -151,7 +151,7 @@ def create_studio_job(
     c = script.get("continuity") or {}
     hero = (
         f"Camera: Medium shot. {c['talent']} holds {c['product']} at chest height and looks at it "
-        f"with a soft smile, in {c.get('setting') or 'a calm spa room'}."
+        f"with a soft smile, in {c.get('setting') or 'a bright, tidy shop interior'}."
         if c.get("product") and c.get("talent")
         else _camera(first) + first["visual_prompt"]
     )
@@ -193,7 +193,7 @@ def create_studio_job(
     keyframes = [
         compose(
             modality="image",
-            task="Photoreal first frame of one shot of the same vertical 9:16 spa video ad. "
+            task="Photoreal first frame of one shot of the same vertical 9:16 video ad. "
             "Same person, room and product design as the reference image, but the product is only "
             f"where this shot puts it; new camera framing and action.{NO_TEXT}",
             subject=_camera(s)
@@ -211,7 +211,7 @@ def create_studio_job(
             task=f"Image-to-video with synchronized audio (SFX, ambience, voice if any), 9:16.{NO_TEXT_VIDEO}",
             # English only: the Vietnamese description adds nothing the video model can read.
             subject=f"{_camera(s)}{s['visual_prompt']}. Motion: {s['motion'] or 'slow push-in'}. "
-            f"Sound: {s['sfx'] or 'soft spa ambience'}."
+            f"Sound: {s['sfx'] or 'soft room ambience'}."
             f"{_continuity(script, s.get('shows_product', True))}",
             style=styles["video"],
             **common,
@@ -221,8 +221,8 @@ def create_studio_job(
     duration = int(min(60, max(10, sum(s["duration_seconds"] for s in shots) + 2)))
     bgm = compose(
         modality="audio",
-        task=f"{duration}s background music bed for a spa advertisement, loopable ending.",
-        subject=script.get("music_mood") or "calm spa ambient",
+        task=f"{duration}s background music bed for an advertisement, loopable ending.",
+        subject=script.get("music_mood") or "warm, light ambient",
         style=styles["audio"],
         **common,
     )

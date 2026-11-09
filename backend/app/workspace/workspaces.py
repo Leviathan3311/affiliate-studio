@@ -19,6 +19,7 @@ HHMM = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
 
 class WorkspaceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    industry: str = Field(default="", max_length=100)
 
 
 class WorkspaceDelete(BaseModel):
@@ -84,7 +85,7 @@ def create_workspace(body: WorkspaceCreate, user: CurrentUser, db: DB):
     db.add(ws)
     db.flush()
     db.add(WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner"))
-    db.add(Brand(workspace_id=ws.id, name=body.name))
+    db.add(Brand(workspace_id=ws.id, name=body.name, industry=body.industry.strip()))
     db.commit()
     return _settings(ws, "owner")
 
@@ -108,7 +109,9 @@ def patch_workspace(body: SettingsPatch, ctx: Admin):
 def delete_workspace(body: WorkspaceDelete, ctx: Owner, bg: BackgroundTasks):
     """Owner only. Every workspace row goes with it (ON DELETE CASCADE), then its media files."""
     if body.name.strip() != ctx.workspace.name.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Tên spa nhập vào chưa đúng")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Tên cửa hàng nhập vào chưa đúng"
+        )
     ws_id = ctx.ws_id
     # These hold RESTRICT keys to rows the cascade also removes; Postgres may check them first.
     for model in (Booking, PublishingJob):
@@ -134,7 +137,9 @@ def list_members(ctx: AnyMember):
 def add_member(body: MemberAdd, ctx: Admin):
     # shortcut: adds an already-registered user; email invitations need an email provider.
     if body.role == "owner" and ctx.role != "owner":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Chỉ chủ spa mới giao được quyền chủ spa")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Chỉ chủ cửa hàng mới giao được quyền chủ cửa hàng"
+        )
     user = ctx.db.scalar(select(User).where(User.email == body.email.lower()))
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Người dùng chưa đăng ký tài khoản")
@@ -160,7 +165,7 @@ def _member(ctx, user_id: uuid.UUID) -> WorkspaceMember:
     if m is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy thành viên")
     if m.role == "owner" and ctx.role != "owner":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Không thể đổi quyền của chủ spa")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Không thể đổi quyền của chủ cửa hàng")
     return m
 
 
@@ -173,14 +178,16 @@ def _ensure_owner_remains(ctx, m: WorkspaceMember) -> None:
         )
     )
     if owners <= 1:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Spa cần ít nhất một chủ spa")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Cửa hàng cần ít nhất một chủ")
 
 
 @router.patch("/workspace/members/{user_id}", response_model=MemberOut)
 def update_member(user_id: uuid.UUID, body: MemberPatch, ctx: Admin):
     m = _member(ctx, user_id)
     if body.role == "owner" and ctx.role != "owner":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Chỉ chủ spa mới giao được quyền chủ spa")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Chỉ chủ cửa hàng mới giao được quyền chủ cửa hàng"
+        )
     if body.role != "owner":
         _ensure_owner_remains(ctx, m)
     ctx.audit("member.role_changed", "user", user_id, before=m.role, after=body.role)
