@@ -1,5 +1,6 @@
 """Meta Graph API client (BRD §7, MOD-06). Thin wrappers; no SDK."""
 
+import logging
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -9,6 +10,8 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.db import utcnow
+
+log = logging.getLogger(__name__)
 
 SCOPES = (
     "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement,pages_manage_posts,"
@@ -78,7 +81,15 @@ def exchange_code_for_pages(code: str) -> list[dict]:
         timeout=15,
     )
     r.raise_for_status()
-    return r.json().get("data", [])
+    pages = r.json().get("data", [])
+    if not pages:  # say why in the log: a Page not ticked in the dialog, or a declined permission
+        perms = httpx.get(_graph("me/permissions"), params={"access_token": user_token}, timeout=15)
+        if perms.is_success:
+            log.warning(
+                "meta oauth: no pages returned; permissions %s",
+                {p["permission"]: p["status"] for p in perms.json().get("data", [])},
+            )
+    return pages
 
 
 def subscribe_page(page_id: str, page_token: str) -> None:

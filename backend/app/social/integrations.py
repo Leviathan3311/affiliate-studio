@@ -139,6 +139,8 @@ def meta_callback(
         )
     )
     db.commit()
+    if not pages:
+        return RedirectResponse(f"{target}&meta_error=no_pages")
     return RedirectResponse(f"{target}&connected={connected}")
 
 
