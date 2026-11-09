@@ -6,9 +6,16 @@ Every finished deliverable is saved as an artifact version; chat replies are nev
 
 import base64
 import json
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -86,6 +93,22 @@ def _input_parts(db: Session, project: Project) -> tuple[list[dict], list[str]]:
     return parts, skipped
 
 
+def _flatten_items(v):
+    """Gemini sometimes returns {"segment": ..., "detail": ...} objects where a string was asked for."""
+    if not isinstance(v, list):
+        return v
+    return [
+        " · ".join(str(x) for x in item.values() if x not in (None, ""))
+        if isinstance(item, dict)
+        else item
+        for item in v
+    ]
+
+
+# A list of short texts in a model's JSON answer; objects are flattened instead of failing the task.
+Texts = Annotated[list[str], BeforeValidator(_flatten_items)]
+
+
 # --- Project Context Agent ---
 
 
@@ -96,26 +119,13 @@ class KeyFact(BaseModel):
 
 class ProjectContext(BaseModel):
     summary: str
-    services: list[str] = []
-    key_messages: list[str] = []
+    services: Texts = []
+    key_messages: Texts = []
     brand_voice: str = ""
     audience: str = ""
     key_facts: list[KeyFact] = []
-    constraints: list[str] = []
-    missing: list[str] = []
-
-    @field_validator("services", "key_messages", "constraints", "missing", mode="before")
-    @classmethod
-    def _flatten(cls, v):
-        # Gemini sometimes returns {"name": ..., "price": ...} objects where we asked for strings.
-        if not isinstance(v, list):
-            return v
-        return [
-            " · ".join(str(x) for x in item.values() if x not in (None, ""))
-            if isinstance(item, dict)
-            else item
-            for item in v
-        ]
+    constraints: Texts = []
+    missing: Texts = []
 
 
 def build_project_context(db: Session, project: Project) -> ProjectContext:
@@ -150,17 +160,17 @@ class Evidence(BaseModel):
 
 class ResearchOut(BaseModel):
     research_summary: str
-    target_audience: list[str] = []
-    customer_pain_points: list[str] = []
-    customer_questions: list[str] = []
-    competitor_insights: list[str] = []
-    social_trends: list[str] = []
-    content_opportunities: list[str] = []
+    target_audience: Texts = []
+    customer_pain_points: Texts = []
+    customer_questions: Texts = []
+    competitor_insights: Texts = []
+    social_trends: Texts = []
+    content_opportunities: Texts = []
     evidence: list[Evidence] = []
-    assumptions: list[str] = []
-    counterexamples: list[str] = []
-    risks: list[str] = []
-    unknowns: list[str] = []
+    assumptions: Texts = []
+    counterexamples: Texts = []
+    risks: Texts = []
+    unknowns: Texts = []
     confidence: Literal["low", "medium", "high"] = "low"
 
 
@@ -325,7 +335,7 @@ class ScriptVariant(BaseModel):
     voiceover: str = ""
     music_mood: str = ""
     caption: str = ""
-    hashtags: list[str] = []
+    hashtags: Texts = []
     continuity: Continuity = Continuity()
     shots: list[Shot] = Field(min_length=1, max_length=8)
 

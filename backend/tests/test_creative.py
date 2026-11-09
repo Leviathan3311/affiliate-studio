@@ -676,3 +676,15 @@ def test_project_context_accepts_objects_where_strings_were_asked():
         {"summary": "s", "services": [{"name": "Gói Tự làm", "price": "499.000đ"}, "Phí cài đặt"]}
     )
     assert ctx.services == ["Gói Tự làm · 499.000đ", "Phí cài đặt"]
+
+
+def test_research_accepts_objects_where_strings_were_asked():
+    from app.ai.agents import ResearchOut
+
+    out = ResearchOut.model_validate(
+        {
+            "research_summary": "s",
+            "target_audience": [{"segment": "Chủ quán cafe", "where": "TP.HCM"}],
+        }
+    )
+    assert out.target_audience == ["Chủ quán cafe · TP.HCM"]
