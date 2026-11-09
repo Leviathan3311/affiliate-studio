@@ -22,7 +22,10 @@ def current_user(
     if cred is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing token")
     try:
-        user_id = uuid.UUID(decode_token(cred.credentials)["sub"])
+        claims = decode_token(cred.credentials)
+        if "purpose" in claims:  # OAuth state and reset links are not sessions
+            raise KeyError("purpose")
+        user_id = uuid.UUID(claims["sub"])
     except (jwt.PyJWTError, KeyError, ValueError):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token") from None
     user = db.get(User, user_id)

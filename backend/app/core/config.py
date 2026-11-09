@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     api_public_url: str = "http://localhost:8000"
 
+    # Outgoing email (password reset). Gmail: smtp.gmail.com + an App Password.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+
     # Meta Graph API (MOD-06)
     meta_app_id: str = ""
     meta_app_secret: str = ""

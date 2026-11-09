@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { api, ApiError, session } from "@/lib/api";
 import { LegalLinks } from "./legal";
@@ -66,6 +66,11 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         hint={mode === "register" ? "Tối thiểu 8 ký tự" : undefined}
         error={f.password}
       />
+      {mode === "login" && (
+        <Link href="/forgot-password" className="-mt-2 self-end text-sm text-muted underline">
+          Quên mật khẩu?
+        </Link>
+      )}
       <Button variant="primary" type="submit" busy={busy} className="mt-1 h-10">
         {mode === "login" ? "Đăng nhập" : "Tạo tài khoản"}
       </Button>
@@ -86,6 +91,142 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           </>
         )}
       </p>
+    </form>
+  );
+}
+
+export function ForgotForm() {
+  const [error, setError] = useState<ApiError | null>(null);
+  const [sentTo, setSentTo] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const email = String(new FormData(e.currentTarget).get("email") ?? "");
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/auth/forgot-password", { method: "POST", json: { email } });
+      setSentTo(email);
+    } catch (err) {
+      setError(err as ApiError);
+    }
+    setBusy(false);
+  }
+
+  if (sentTo)
+    return (
+      <div className="flex flex-col gap-4 text-sm">
+        <p>
+          Nếu <b>{sentTo}</b> có tài khoản, chúng tôi vừa gửi liên kết đặt lại
+          mật khẩu tới hộp thư đó. Liên kết hết hạn sau 30 phút; nhớ xem cả thư
+          mục Spam.
+        </p>
+        <Link href="/login" className="font-medium text-ink underline">
+          Quay lại đăng nhập
+        </Link>
+      </div>
+    );
+
+  const f = error?.fields ?? {};
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+      {error && !Object.keys(f).length && <ErrorNote error={error} />}
+      <Field
+        label="Email"
+        name="email"
+        type="email"
+        autoComplete="email"
+        required
+        error={f.email}
+      />
+      <Button variant="primary" type="submit" busy={busy} className="mt-1 h-10">
+        Gửi liên kết đặt lại
+      </Button>
+      <p className="text-center text-sm text-muted">
+        Nhớ ra rồi?{" "}
+        <Link href="/login" className="font-medium text-ink underline">
+          Đăng nhập
+        </Link>
+      </p>
+    </form>
+  );
+}
+
+export function ResetForm() {
+  const router = useRouter();
+  const token = useSearchParams().get("token") ?? "";
+  const [error, setError] = useState<ApiError | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    if (form.get("password") !== form.get("confirm")) {
+      setError(new ApiError(422, "", { confirm: "Hai mật khẩu chưa khớp" }));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const { access_token } = await api<{ access_token: string }>(
+        "/auth/reset-password",
+        {
+          method: "POST",
+          json: { token, password: form.get("password") },
+        },
+      );
+      session.clear();
+      session.setToken(access_token);
+      router.replace("/app");
+    } catch (err) {
+      setError(err as ApiError);
+      setBusy(false);
+    }
+  }
+
+  if (!token)
+    return (
+      <p className="text-sm">
+        Liên kết không đầy đủ.{" "}
+        <Link
+          href="/forgot-password"
+          className="font-medium text-ink underline"
+        >
+          Gửi lại yêu cầu
+        </Link>
+      </p>
+    );
+
+  const f = error?.fields ?? {};
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+      {error && !Object.keys(f).length && <ErrorNote error={error} />}
+      <Field
+        label="Mật khẩu mới"
+        name="password"
+        type="password"
+        autoComplete="new-password"
+        required
+        hint="Tối thiểu 8 ký tự"
+        error={f.password}
+      />
+      <Field
+        label="Nhập lại mật khẩu"
+        name="confirm"
+        type="password"
+        autoComplete="new-password"
+        required
+        error={f.confirm}
+      />
+      <Button variant="primary" type="submit" busy={busy} className="mt-1 h-10">
+        Đặt mật khẩu mới
+      </Button>
+      {error?.status === 400 && (
+        <Link href="/forgot-password" className="text-center text-sm font-medium text-ink underline">
+          Gửi lại liên kết
+        </Link>
+      )}
     </form>
   );
 }
