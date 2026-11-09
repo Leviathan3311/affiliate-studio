@@ -3,5 +3,7 @@
 {
   "name": "growthpilot-spa",
   "compatibility_date": "2026-11-01",
-  "assets": { "directory": "./out", "not_found_handling": "404-page" }
+  "assets": { "directory": "./out", "not_found_handling": "404-page" },
+  "workers_dev": false,
+  "routes": [{ "pattern": "app.growthpilot-spa.online", "custom_domain": true }]
 }
