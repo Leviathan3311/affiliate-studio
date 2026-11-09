@@ -1,21 +1,28 @@
+import logging
 import uuid
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
-from app.core.deps import DB, Admin, AnyMember, CurrentUser
-from app.models import ROLES, Brand, User, Workspace, WorkspaceMember
+from app.core import storage
+from app.core.deps import DB, Admin, AnyMember, CurrentUser, Owner
+from app.models import ROLES, Booking, Brand, PublishingJob, User, Workspace, WorkspaceMember
 
 router = APIRouter(tags=["workspaces"])
+log = logging.getLogger(__name__)
 Role = Literal[ROLES]  # type: ignore[valid-type]
 HHMM = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
 
 
 class WorkspaceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+
+
+class WorkspaceDelete(BaseModel):
+    name: str  # typed by the owner as confirmation
 
 
 class WorkspaceSettings(BaseModel):
@@ -95,6 +102,21 @@ def patch_workspace(body: SettingsPatch, ctx: Admin):
     ctx.audit("workspace.settings_updated", "workspace", ctx.ws_id, fields=sorted(changes))
     ctx.db.commit()
     return _settings(ctx.workspace, ctx.role)
+
+
+@router.delete("/workspace", status_code=204)
+def delete_workspace(body: WorkspaceDelete, ctx: Owner, bg: BackgroundTasks):
+    """Owner only. Every workspace row goes with it (ON DELETE CASCADE), then its media files."""
+    if body.name.strip() != ctx.workspace.name.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Tên spa nhập vào chưa đúng")
+    ws_id = ctx.ws_id
+    # These hold RESTRICT keys to rows the cascade also removes; Postgres may check them first.
+    for model in (Booking, PublishingJob):
+        ctx.db.execute(delete(model).where(model.workspace_id == ws_id))
+    ctx.db.delete(ctx.workspace)
+    ctx.db.commit()
+    log.warning("workspace %s deleted by user %s", ws_id, ctx.user.id)
+    bg.add_task(storage.delete_prefix, f"ws/{ws_id}/")
 
 
 @router.get("/workspace/members", response_model=list[MemberOut])

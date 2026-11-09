@@ -6,6 +6,7 @@ move bytes directly to/from storage, so media never passes through PostgreSQL or
 
 import hashlib
 import hmac
+import shutil
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -114,6 +115,20 @@ def delete(key: str) -> None:
         _s3().delete_object(Bucket=get_settings().r2_bucket, Key=key)
     else:
         local_path(key).unlink(missing_ok=True)
+
+
+def delete_prefix(prefix: str) -> None:
+    """Remove every object under prefix, e.g. all media of a deleted workspace."""
+    if not prefix.endswith("/"):
+        raise ValueError("prefix must end with /")
+    if _r2_enabled():
+        s3, bucket = _s3(), get_settings().r2_bucket
+        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+            keys = [{"Key": o["Key"]} for o in page.get("Contents", [])]
+            if keys:
+                s3.delete_objects(Bucket=bucket, Delete={"Objects": keys, "Quiet": True})
+    else:
+        shutil.rmtree(local_path(prefix), ignore_errors=True)
 
 
 def read_bytes(key: str, limit: int) -> bytes | None:

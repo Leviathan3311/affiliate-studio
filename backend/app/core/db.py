@@ -1,9 +1,10 @@
+import sqlite3
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import ClassVar
 
-from sqlalchemy import DateTime, Uuid, create_engine
+from sqlalchemy import DateTime, Engine, Uuid, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.types import TypeDecorator
 
@@ -38,6 +39,13 @@ class Base(DeclarativeBase):
 class IdMixin:
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+@event.listens_for(Engine, "connect")
+def _sqlite_foreign_keys(conn, _record) -> None:
+    # SQLite ignores ON DELETE CASCADE unless asked; Postgres always enforces it.
+    if isinstance(conn, sqlite3.Connection):
+        conn.execute("PRAGMA foreign_keys=ON")
 
 
 def make_engine(url: str):

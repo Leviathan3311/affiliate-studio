@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, CalendarClock, CalendarDays, FolderKanban, Inbox, LayoutGrid, LogOut, Menu, Settings, Users, X } from "lucide-react";
+import { Bell, CalendarClock, CalendarDays, Check, ChevronsUpDown, FolderKanban, Inbox, LayoutGrid, LogOut, Menu, Plus, Settings, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -73,13 +73,41 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { data: ov } = useApi<Overview>(can("admin", "sales", "branch_manager") ? "/analytics/overview" : null, 30000);
   return (
     <nav aria-label="Điều hướng chính" className="flex h-full flex-col gap-6 px-3 py-3">
-      <div className="flex items-center gap-2.5 px-1.5">
-        <Mark />
-        <div className="min-w-0 leading-tight">
-          <p className="truncate text-sm font-semibold">{workspace.name}</p>
-          <p className="text-xs text-muted">GrowthPilot AI</p>
+      <details className="relative">
+        <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-lg px-1.5 py-1 hover:bg-raised [&::-webkit-details-marker]:hidden">
+          <Mark />
+          <div className="min-w-0 flex-1 leading-tight">
+            <p className="truncate text-sm font-semibold">{workspace.name}</p>
+            <p className="text-xs text-muted">GrowthPilot AI</p>
+          </div>
+          <ChevronsUpDown className="size-4 flex-none text-muted" strokeWidth={1.6} aria-label="Đổi spa" />
+        </summary>
+        <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-[var(--radius-control)] border border-border bg-surface p-1 shadow-lg shadow-black/40">
+          {me.workspaces.map((w) => (
+            <button
+              key={w.id}
+              onClick={() => {
+                session.setWorkspace(w.id);
+                // Full reload on purpose: no screen keeps the old spa's cached data.
+                // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+                window.location.href = "/app";
+              }}
+              aria-current={w.id === workspace.id || undefined}
+              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-raised"
+            >
+              <span className="min-w-0 flex-1 truncate">{w.name}</span>
+              {w.id === workspace.id && <Check className="size-4 text-muted" strokeWidth={1.6} />}
+            </button>
+          ))}
+          <Link
+            href="/onboarding"
+            onClick={onNavigate}
+            className="mt-1 flex items-center gap-2 border-t border-border px-2 pb-1.5 pt-2.5 text-sm text-muted hover:text-ink"
+          >
+            <Plus className="size-4" strokeWidth={1.6} /> Tạo spa mới
+          </Link>
         </div>
-      </div>
+      </details>
       <div className="flex flex-col gap-0.5">
         {NAV.filter((n) => can(...n.roles) || n.roles.length === 0).map((n) => (
           <NavLink

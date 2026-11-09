@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { AuthCard } from "@/components/auth-form";
@@ -35,6 +36,9 @@ export default function Onboarding() {
         <Button variant="primary" type="submit" busy={busy} className="h-10">
           Tạo workspace
         </Button>
+        <Link href="/app" className="text-center text-sm text-muted underline">
+          Quay lại
+        </Link>
       </form>
     </AuthCard>
   );

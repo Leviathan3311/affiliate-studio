@@ -5,7 +5,7 @@ import { Suspense, useState, type FormEvent, type ReactNode } from "react";
 import { StyleLibrary } from "@/components/style-library";
 import { Button, Empty, ErrorNote, Field, PageTitle, Panel, Pill, Select, Skeleton } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import { api, ApiError, useApi } from "@/lib/api";
+import { api, ApiError, session, useApi } from "@/lib/api";
 import { ROLE, vnd } from "@/lib/format";
 import type { Branch, Brand, Knowledge, Member, Role, Service, SocialAccount } from "@/lib/types";
 
@@ -18,6 +18,7 @@ const TABS = [
   { id: "integrations", label: "Facebook & Instagram" },
   { id: "ai", label: "Giờ trực AI" },
   { id: "members", label: "Thành viên" },
+  { id: "delete", label: "Xoá spa" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -32,12 +33,14 @@ export default function SettingsPage() {
 function Settings() {
   const params = useSearchParams();
   const router = useRouter();
-  const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "brand") as Tab;
+  const { can } = useWorkspace();
+  const tabs = TABS.filter((t) => t.id !== "delete" || can());
+  const tab = (tabs.find((t) => t.id === params.get("tab"))?.id ?? "brand") as Tab;
   return (
     <>
       <PageTitle title="Cài đặt" sub="AI chỉ được dùng thông tin ở đây khi tư vấn khách; không có giá thì AI không báo giá." />
       <div role="tablist" aria-label="Mục cài đặt" className="mb-6 flex gap-5 overflow-x-auto border-b border-border">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.id}
             role="tab"
@@ -59,6 +62,7 @@ function Settings() {
       {tab === "integrations" && <IntegrationsTab connected={params.get("connected")} metaError={params.get("meta_error")} />}
       {tab === "ai" && <AiTab />}
       {tab === "members" && <MembersTab />}
+      {tab === "delete" && <DeleteTab />}
     </>
   );
 }
@@ -499,5 +503,45 @@ function MembersTab() {
         ))}
       </ul>
     </div>
+  );
+}
+
+function DeleteTab() {
+  const { me, workspace } = useWorkspace();
+  const [typed, setTyped] = useState("");
+  const s = useSubmit();
+  const next = me.workspaces.find((w) => w.id !== workspace.id);
+  return (
+    <Panel title={`Xoá ${workspace.name}`} className="max-w-2xl">
+      <p className="text-sm">
+        Xoá vĩnh viễn spa này cùng toàn bộ dữ liệu của nó: khách hàng, hội thoại, lịch hẹn, dịch vụ và giá, dự án, ảnh,
+        video và các Page đã kết nối. <b>Không khôi phục được.</b> Các spa khác của bạn không bị ảnh hưởng.
+      </p>
+      <form
+        className="mt-5 flex flex-col gap-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const ok = await s.run(() => api("/workspace", { method: "DELETE", json: { name: typed } }));
+          if (!ok) return;
+          if (next) session.setWorkspace(next.id);
+          window.location.href = next ? "/app" : "/onboarding";
+        }}
+        noValidate
+      >
+        {s.error && <ErrorNote error={s.error} />}
+        <Field
+          label={`Gõ "${workspace.name}" để xác nhận`}
+          name="confirm"
+          autoComplete="off"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+        />
+        <div>
+          <Button variant="danger" type="submit" busy={s.busy} disabled={typed.trim() !== workspace.name.trim()}>
+            Xoá vĩnh viễn
+          </Button>
+        </div>
+      </form>
+    </Panel>
   );
 }

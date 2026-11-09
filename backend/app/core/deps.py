@@ -92,5 +92,6 @@ def require(*roles: str):
 
 AnyMember = Annotated[Ctx, Depends(workspace_ctx)]
 Admin = Annotated[Ctx, Depends(require("admin"))]
+Owner = Annotated[Ctx, Depends(require())]
 Marketing = Annotated[Ctx, Depends(require("admin", "marketing"))]
 Sales = Annotated[Ctx, Depends(require("admin", "sales", "branch_manager"))]
