@@ -149,7 +149,7 @@ cd frontend && npx tsc --noEmit && npm run lint && npm run build
 
 ## Model licences
 
-FLUX.2 klein 9B is licensed for **non-commercial** use only. Before selling the service, switch to the 4B model (Apache-2.0) with `GP_FLUX_VARIANT=4b` in Notebook 1. Videos made with MiniMax H3 must show "MiniMax H3" in the interface; GrowthPilot already does.
+Images use FLUX.2 klein 4B (Apache-2.0), which allows selling the service. The 9B model is non-commercial; `GP_FLUX_VARIANT=9b` is only for private tests or with a commercial licence from Black Forest Labs. Videos made with MiniMax H3 must show "MiniMax H3" in the interface; GrowthPilot already does.
 
 ## Documents
 

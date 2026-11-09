@@ -55,9 +55,9 @@ SDCPP = ROOT / "stable-diffusion.cpp"
 SDCPP_TAG = "master-1031-c6dfa9d"  # first release with MiniMax-H3 I2VA docs; bump deliberately
 SD_CLI = SDCPP / "build/bin/sd-cli"
 
-# Owner's decision (Nov 2026): non-commercial internal use, so the higher-quality 9B is the default.
-# FLUX.2 klein 9B is FLUX Non-Commercial; set GP_FLUX_VARIANT=4b (Apache-2.0) before selling the service.
-FLUX_VARIANT = os.environ.get("GP_FLUX_VARIANT", "9b")
+# GrowthPilot is sold as a subscription (Nov 2026), so the default is klein 4B (Apache-2.0).
+# 9B is FLUX Non-Commercial: GP_FLUX_VARIANT=9b only for private tests or with a BFL commercial licence.
+FLUX_VARIANT = os.environ.get("GP_FLUX_VARIANT", "4b")
 FLUX = {
     "4b": [
         ("unsloth/FLUX.2-klein-4B-GGUF", "flux-2-klein-4b-Q8_0.gguf", "diffusion_models"),  # 4.3 GB
