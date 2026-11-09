@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { api, ApiError, session } from "@/lib/api";
 import { LegalLinks } from "./legal";
+import { track } from "./pixel";
 import { Mark } from "./shell";
 import { Button, ErrorNote, Field } from "./ui";
 
@@ -44,7 +45,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       });
       session.clear();
       session.setToken(access_token);
-      router.replace(mode === "register" ? "/onboarding" : "/app");
+      if (mode === "register") track("CompleteRegistration");
+      // keep ?shop=&industry= from the landing page so onboarding is prefilled
+      router.replace(mode === "register" ? `/onboarding${window.location.search}` : "/app");
     } catch (err) {
       setError(err as ApiError);
       setBusy(false);

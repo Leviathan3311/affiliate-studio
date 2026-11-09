@@ -57,6 +57,10 @@ export default function PrivacyPage() {
           dữ liệu của chính cửa hàng đó, và quyền của từng nhân viên được giới hạn theo vai trò.
         </p>
         <p>
+          Trang giới thiệu và trang đăng ký dùng Meta Pixel để đo hiệu quả quảng cáo của GrowthPilot (lượt xem trang,
+          đăng ký, bắt đầu dùng thử); chúng tôi không gửi tin nhắn hay dữ liệu khách của cửa hàng cho Pixel.
+        </p>
+        <p>
           Chúng tôi giữ dữ liệu trong thời gian cửa hàng còn sử dụng dịch vụ. Dự án bị xoá được giữ trong thùng rác 30 ngày rồi xoá hẳn.
         </p>
       </section>

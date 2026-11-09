@@ -95,3 +95,23 @@ body {
     color: var(--text);
   }
 }
+
+/* Landing page: one small entrance for swapped fragments; none when motion is reduced. */
+@keyframes landing-pop {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes landing-fade {
+  from { opacity: 0; }
+}
+.landing-pop { animation: landing-pop 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.landing-fade { animation: landing-fade 500ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .landing-pop, .landing-fade { animation: none; }
+}
+.reveal-on [data-reveal] {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 600ms ease-out, transform 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.reveal-on [data-reveal].is-in { opacity: 1; transform: none; }

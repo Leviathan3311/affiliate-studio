@@ -33,7 +33,7 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
 
 export function LegalLinks({ className = "" }: { className?: string }) {
   return (
-    <p className={`flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted ${className}`}>
+    <p className={`flex flex-wrap justify-center gap-x-4 gap-y-1 text-[13px] text-muted ${className}`}>
       <Link href="/privacy" className="hover:text-ink">Chính sách quyền riêng tư</Link>
       <Link href="/data-deletion" className="hover:text-ink">Xoá dữ liệu</Link>
     </p>

@@ -2,12 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { Landing } from "@/components/landing";
 import { session } from "@/lib/api";
 
 export default function Home() {
   const router = useRouter();
   useEffect(() => {
-    router.replace(session.token() ? "/app" : "/login");
+    if (session.token()) router.replace("/app");
   }, [router]);
-  return null;
+  return <Landing />;
 }
