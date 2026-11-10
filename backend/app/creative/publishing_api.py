@@ -18,6 +18,7 @@ from app.models import (
     ArtifactVersion,
     Project,
     PublishingJob,
+    Service,
     SocialAccount,
     StorageObject,
 )
@@ -275,6 +276,8 @@ def post_photo(body: PhotoPostIn, ctx: Marketing):
 class CaptionIn(BaseModel):
     object_id: uuid.UUID
     hint: str = Field(default="", max_length=500)
+    project_id: uuid.UUID | None = None  # the product's project: brief, context and files
+    service_id: uuid.UUID | None = None  # the product or service in the photo
 
 
 @router.post("/photos/caption")
@@ -285,7 +288,13 @@ def photo_caption(body: CaptionIn, ctx: Marketing):
         raise HTTPException(status.HTTP_409_CONFLICT, "Ảnh chưa tải lên xong")
     try:
         caption, tags = agents.write_photo_caption(
-            ctx.db, ctx.ws_id, image, obj.mime_type, body.hint
+            ctx.db,
+            ctx.ws_id,
+            image,
+            obj.mime_type,
+            body.hint,
+            service=ctx.get(Service, body.service_id) if body.service_id else None,
+            project=ctx.get(Project, body.project_id) if body.project_id else None,
         )
     except (LLMUnavailable, ValidationError):
         raise HTTPException(

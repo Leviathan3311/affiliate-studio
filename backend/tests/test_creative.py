@@ -832,6 +832,7 @@ def test_ai_caption_for_a_photo_drops_invented_prices(client, monkeypatch):
 
     def fake(db, *, system, parts, purpose, workspace_id, **_):
         seen["image"] = parts[1]["inline_data"]["mime_type"]
+        seen["text"] = parts[0]["text"]
         data = {
             "caption": "Cà phê muối 35.000đ, combo chỉ 99.000đ hôm nay!",
             "hashtags": ["caphemuoi", "#saigon"],
@@ -839,11 +840,23 @@ def test_ai_caption_for_a_photo_drops_invented_prices(client, monkeypatch):
         return GeminiResult(data=data, model="fake", sources=[])
 
     monkeypatch.setattr(agents, "gemini_json", fake)
+    from app.models import Project
+
+    with app_db.SessionLocal() as db:
+        p = Project(
+            workspace_id=_uuid.UUID(h["X-Workspace-Id"]),
+            name="Cà phê muối",
+            brief="Khách văn phòng quận 1",
+        )
+        db.add(p)
+        db.commit()
+        pid = str(p.id)
     out = client.post(
         "/api/v1/publishing-jobs/photos/caption",
-        json={"object_id": r["object_id"], "hint": "món mới"},
+        json={"object_id": r["object_id"], "hint": "món mới", "project_id": pid},
         headers=h,
     )
     assert out.status_code == 200 and seen["image"] == "image/png"
+    assert "Khách văn phòng quận 1" in seen["text"]  # the project's brief reached the AI
     text = out.json()["caption"]
     assert "99.000đ" not in text and "35.000đ" in text and "#caphemuoi #saigon" in text

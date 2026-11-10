@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Button, Dialog, Empty, ErrorNote, Field, PageTitle, Pill, Skeleton } from "@/components/ui";
+import { Button, Dialog, Empty, ErrorNote, Field, PageTitle, Pill, Select, Skeleton } from "@/components/ui";
 import { api, ApiError, useApi } from "@/lib/api";
 import { PUBLISH_STATUS, time } from "@/lib/format";
-import type { PublishingJob, SocialAccount } from "@/lib/types";
+import type { Project, PublishingJob, SocialAccount } from "@/lib/types";
 
 const FILTERS = [
   { id: "", label: "Tất cả" },
@@ -83,6 +83,8 @@ function PhotoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
   const [objectId, setObjectId] = useState("");
   const [uploading, setUploading] = useState(false);
   const [hint, setHint] = useState("");
+  const projects = useApi<Project[]>("/projects");
+  const [projectId, setProjectId] = useState("");
   const [writing, setWriting] = useState(false);
   const connected = (accounts.data ?? []).filter((a) => a.status === "connected");
   const chosen = picked ?? connected.map((a) => a.id);
@@ -115,7 +117,7 @@ function PhotoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
     try {
       const { caption: text } = await api<{ caption: string }>("/publishing-jobs/photos/caption", {
         method: "POST",
-        json: { object_id: objectId, hint },
+        json: { object_id: objectId, hint, project_id: projectId || null },
       });
       setCaption(text);
     } catch (e) {
@@ -171,6 +173,14 @@ function PhotoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
           <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => choose(e.target.files?.[0] ?? null)} />
           {uploading && <span>Đang tải ảnh lên…</span>}
         </label>
+        <Select label="Ảnh thuộc dự án / sản phẩm nào" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+          <option value="">Không chọn: AI dùng thông tin chung của cửa hàng</option>
+          {(projects.data ?? [])
+            .filter((p) => p.name !== "Ảnh đăng bài")
+            .map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+        </Select>
         <div className="flex items-end gap-2">
           <div className="min-w-0 flex-1">
             <Field label="Gợi ý cho AI (không bắt buộc)" name="hint" value={hint} onChange={(e) => setHint(e.target.value)} placeholder="Ví dụ: món mới, giảm 10% tuần này" />

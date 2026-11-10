@@ -21,7 +21,14 @@ from pydantic import (
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.knowledge import build_context, documents, extract_prices, industry_of, sql_facts
+from app.ai.knowledge import (
+    _price_text,
+    build_context,
+    documents,
+    extract_prices,
+    industry_of,
+    sql_facts,
+)
 from app.ai.llm import gemini_json
 from app.core import storage
 from app.models import Brand, Project, ProjectInput, Service, StorageObject
@@ -658,7 +665,13 @@ class PhotoCaption(BaseModel):
 
 
 def write_photo_caption(
-    db: Session, workspace_id: uuid.UUID, image: bytes, mime: str, hint: str = ""
+    db: Session,
+    workspace_id: uuid.UUID,
+    image: bytes,
+    mime: str,
+    hint: str = "",
+    service: Service | None = None,
+    project: Project | None = None,
 ) -> tuple[str, list[str]]:
     """Look at the photo and write a Vietnamese post in the shop's voice, using only its own facts."""
     brand = db.scalar(select(Brand).where(Brand.workspace_id == workspace_id))
@@ -670,13 +683,34 @@ Không được nói: {(brand.forbidden_claims if brand else "") or "(không có
 {GUARDRAILS}
 - Không dùng "100%", "24/7", "số 1", "tuyệt đối", "cam kết". Không bịa con số.
 Trả JSON {{"caption": "...", "hashtags": ["#..."]}} (3-6 hashtag tiếng Việt không dấu)."""
-    text = f"DỮ LIỆU THƯƠNG HIỆU:\n{knowledge or '(chưa có)'}\n\nGợi ý của chủ cửa hàng: {hint or '(không có)'}"
+    focus = []
+    if service:  # the product or service in the photo: the post is about this one
+        promo = f" Ưu đãi: {service.promotion}." if service.promotion else ""
+        focus.append(
+            f"SẢN PHẨM/DỊCH VỤ TRONG ẢNH: {service.name}. {service.description or ''} "
+            f"Giá: {_price_text(service)}.{promo}"
+        )
+    if project:  # the product's marketing project: brief, confirmed context and uploaded files
+        focus.append(project_brief(db, project))
+        if project.context:
+            focus.append(
+                "PROJECT CONTEXT ĐÃ XÁC NHẬN:\n" + json.dumps(project.context, ensure_ascii=False)
+            )
+    text = "\n\n".join(
+        [
+            f"DỮ LIỆU THƯƠNG HIỆU:\n{knowledge or '(chưa có)'}",
+            *focus,
+            f"Gợi ý của chủ cửa hàng: {hint or '(không có)'}",
+        ]
+    )
     res = gemini_json(
         db,
         system=system,
         parts=[
             {"text": text},
             {"inline_data": {"mime_type": mime, "data": base64.b64encode(image).decode()}},
+            # the project's own files (product sheet, price list, photos) the owner uploaded
+            *(_input_parts(db, project)[0] if project else []),
         ],
         purpose="publishing.photo_caption",
         workspace_id=workspace_id,
