@@ -186,3 +186,28 @@ def test_today_counts_night_queue(client, db, spa, llm):
     body = client.get("/api/v1/analytics/today", headers=spa).json()
     assert sum(body["inbound_by_hour"]) == 1 and len(body["inbound_by_hour"]) == 24
     assert body["queued_for_morning"] == 1
+
+
+def test_worker_survives_a_database_outage(monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    from app import worker
+
+    calls = []
+
+    def run_once():
+        calls.append(1)
+        if len(calls) == 1:
+            raise OperationalError("select 1", {}, Exception("dns"))
+        if len(calls) == 3:
+            raise SystemExit  # stop the endless loop after it carried on
+        return 1
+
+    monkeypatch.setattr(worker, "run_once", run_once)
+    monkeypatch.setattr(worker.time, "sleep", lambda s: None)
+    monkeypatch.setattr(worker, "flush", lambda: None)
+    try:
+        worker.main()
+    except SystemExit:
+        pass
+    assert len(calls) == 3

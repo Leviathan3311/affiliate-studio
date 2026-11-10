@@ -11,6 +11,7 @@ import time
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.ai import knowledge
@@ -164,9 +165,20 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     poll = get_settings().worker_poll_seconds
     log.info("worker started (poll %.1fs)", poll)
+    backoff = poll
     while True:
-        if run_once() == 0:
-            time.sleep(poll)
+        try:
+            if run_once() == 0:
+                time.sleep(poll)
+            backoff = poll
+        except OperationalError as e:
+            # Network or database down for a moment (Wi-Fi drop, laptop waking up): wait and go on,
+            # otherwise scheduled posts and AI replies stop until someone restarts the worker.
+            log.warning(
+                "database unreachable (%s); retrying in %.0fs", type(e.orig).__name__, backoff
+            )
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 60)
         flush()
 
 
