@@ -291,6 +291,29 @@ Framing = Literal[
 Transition = Literal["cut", "match", "flash", "dissolve"]
 
 
+class ChatLine(BaseModel):
+    who: Literal["khach", "shop"]  # customer on the left, the shop (AI) on the right
+    text: str = Field(max_length=160)
+
+
+def _chat_lines(v):
+    """Accept ["question", "answer"] too: alternate customer, shop."""
+    if not isinstance(v, list):
+        return []
+    out = []
+    for i, item in enumerate(v[:3]):
+        if isinstance(item, str):
+            item = {"who": "khach" if i % 2 == 0 else "shop", "text": item}
+        if isinstance(item, dict) and str(item.get("text", "")).strip():
+            who = (
+                "shop"
+                if str(item.get("who", "")).lower() in ("shop", "ai", "cửa hàng", "store")
+                else "khach"
+            )
+            out.append({"who": who, "text": str(item["text"]).strip()[:160]})
+    return out
+
+
 class Shot(BaseModel):
     description: str
     visual_prompt: str
@@ -300,6 +323,8 @@ class Shot(BaseModel):
     on_screen_text: str = ""
     highlight: str = ""  # the word of on_screen_text drawn in the accent colour
     stat: str = ""  # optional big callout card, e.g. "505nm" or "10 phút"
+    # Messenger bubbles drawn over the shot in a real font: AI video cannot render a readable screen.
+    chat: Annotated[list[ChatLine], BeforeValidator(_chat_lines)] = []
     voiceover: str = ""  # spoken Vietnamese line for this shot (Gemini TTS)
     sfx: str = ""
     transition: Transition = "cut"
@@ -394,6 +419,10 @@ hình/motif, motion phải kết thúc đúng ở đó), flash (lóe sáng theo 
 chậm), cut. Dùng ít nhất 2 kiểu khác nhau; shot cuối để cut.
   - highlight: một từ trong on_screen_text được tô màu nhấn. stat: thẻ số liệu lớn, tối đa 2 shot có, \
 chỉ số có trong tài liệu (ví dụ "505nm", "10 phút"), để trống nếu không có.
+  - chat: khi câu chuyện cần cho thấy tin nhắn (khách hỏi, cửa hàng trả lời), ghi tối đa 3 tin \
+[{{"who":"khach"|"shop","text":"..."}}] bằng tiếng Việt, ngắn; hệ thống tự vẽ khung chat rõ nét lên hình. \
+Shot có chat thì visual_prompt KHÔNG quay cận màn hình điện thoại (AI vẽ chữ trên màn hình bị nhoè): \
+quay người cầm điện thoại, màn hình quay đi hoặc mờ nền; shot có chat thì để trống stat.
 - motion: chuyển động máy quay/chủ thể bằng tiếng Anh, nối được với shot sau. music_mood: tag nhạc nền \
 tiếng Anh. caption/hook/cta/on_screen_text/voiceover: tiếng Việt."""
 
@@ -444,7 +473,7 @@ nhau rõ rệt về góc tiếp cận (ví dụ: giải quyết nỗi lo, ưu đ
 Nếu không có research report, ghi rõ trong "insight" rằng đây là giả định.
 Trả JSON: {{"variants":[{{"title","angle","insight","hook","key_message","cta","duration_seconds",
 "voiceover","music_mood","caption","hashtags":[],"continuity":{{"product","talent","setting","motif"}},
-"shots":[{{"description","visual_prompt","framing","shows_product","motion","on_screen_text","highlight","stat","voiceover","sfx",
+"shots":[{{"description","visual_prompt","framing","shows_product","motion","on_screen_text","highlight","stat","chat","voiceover","sfx",
 "transition","duration_seconds"}}]}}]}}"""
     parts = [{"text": project_brief(db, project)}]
     if research:
@@ -487,7 +516,7 @@ yêu cầu đổi. {SCRIPT_RULES}
 Trả MỘT object JSON (không phải mảng) đúng schema của kịch bản: {{"title","angle","insight","hook",
 "key_message","cta","duration_seconds","voiceover","music_mood","caption","hashtags":[],
 "continuity":{{"product","talent","setting","motif"}},
-"shots":[{{"description","visual_prompt","framing","shows_product","motion","on_screen_text","highlight","stat","voiceover",
+"shots":[{{"description","visual_prompt","framing","shows_product","motion","on_screen_text","highlight","stat","chat","voiceover",
 "sfx","transition","duration_seconds"}}]}}.
 Sửa một shot thì giữ nguyên continuity, trừ khi được yêu cầu đổi sản phẩm, người hoặc bối cảnh; đổi continuity thì sửa mọi shot cho khớp."""
     clean = {k: v for k, v in script.items() if k != "flags"}

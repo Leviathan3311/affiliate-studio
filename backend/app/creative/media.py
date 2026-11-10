@@ -282,7 +282,9 @@ def create_studio_job(
                 "duration_seconds": s["duration_seconds"],
                 "on_screen_text": s.get("on_screen_text", ""),
                 "highlight": s.get("highlight", ""),
-                "stat": s.get("stat", ""),
+                # a chat card and a stat card would sit on top of each other: the chat wins
+                "stat": "" if s.get("chat") else s.get("stat", ""),
+                "chat": s.get("chat", []),
                 "transition": s.get("transition", "cut"),
                 "voiceover": s.get("voiceover", ""),
                 "model": c.model,

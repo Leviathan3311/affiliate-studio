@@ -743,3 +743,20 @@ def test_ad_talent_defaults_to_vietnamese():
     )
     kept = _continuity({"continuity": {"talent": "a Korean tourist"}})
     assert "Vietnamese" not in kept and "Korean tourist" in kept
+
+
+def test_chat_lines_reach_the_render_job_and_replace_the_stat():
+    from app.ai.agents import Shot
+
+    shot = Shot.model_validate(
+        {
+            "description": "d",
+            "visual_prompt": "v",
+            "stat": "35k",
+            "chat": ["Giá sao shop?", {"who": "ai", "text": "Dạ 35.000đ ạ"}],
+        }
+    ).model_dump()
+    assert shot["chat"] == [
+        {"who": "khach", "text": "Giá sao shop?"},
+        {"who": "shop", "text": "Dạ 35.000đ ạ"},
+    ]

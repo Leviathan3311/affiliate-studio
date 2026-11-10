@@ -247,7 +247,10 @@ W, H = 1080, 1920
 GEN_W = 1088  # FLUX.2 latents need multiples of 16; cropped back to W
 # MiniMax H3 size (multiples of 32); stage_mix scales to W x H. On a T4 480x864 took ~0.2 min per
 # frame (a 6 s shot ~30 min), so Kaggle renders 384x672. The L40S did 384x672 in ~2 min per shot.
-VIDEO_W, VIDEO_H = (480, 864) if GPU_LAYOUT == "single" else (384, 672)
+# 480x864 scaled 2.25x to 1080x1920 looked soft; the L40S renders 704x1248 (about 2x the time).
+VIDEO_W, VIDEO_H = (704, 1248) if GPU_LAYOUT == "single" else (384, 672)
+# Upscale with lanczos and a light unsharp instead of the default bicubic.
+UPSCALE = f"scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H},unsharp=5:5:0.5:5:5:0.0"
 
 
 def h3_frames(seconds: float) -> int:
@@ -347,6 +350,52 @@ def stat_card(text: str, accent: str):
                            fill=(20, 16, 12, 150))
     draw.text(((W - tw) / 2, cy - 112), text, font=font, fill=accent)
     return layer
+
+
+def chat_bubbles(lines: list[dict]) -> list:
+    """Messenger-style bubbles on a white card in the lower half, one W x H layer per message so
+    they pop in one by one: the customer on the left in grey, the shop on the right in blue. AI
+    video turns a phone screen into noise, so the readable conversation is drawn here."""
+    from PIL import Image, ImageDraw
+
+    font, size = _font(42), 42
+    measure = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    card_x0, card_x1, max_w = int(W * 0.07), int(W * 0.93), int(W * 0.62)
+
+    def wrap(text: str) -> list[str]:
+        out = [""]
+        for word in text.split():
+            trial = f"{out[-1]} {word}".strip()
+            if out[-1] and measure.textlength(trial, font=font) > max_w - 56:
+                out.append(word)
+            else:
+                out[-1] = trial
+        return out
+
+    bubbles, y = [], int(H * 0.50) + 36
+    for line in lines[:3]:
+        rows = wrap(line["text"])
+        bw = max(measure.textlength(r, font=font) for r in rows) + 56
+        bh = len(rows) * int(size * 1.3) + 34
+        shop = line.get("who") == "shop"
+        x0 = card_x1 - 28 - bw if shop else card_x0 + 28
+        bubbles.append((x0, y, bw, bh, rows, shop))
+        y += bh + 22
+    card_y0, card_y1 = int(H * 0.50), y + 14
+    layers = []
+    for k in range(len(bubbles)):
+        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        if k == 0:  # the card itself comes in with the first message
+            draw.rounded_rectangle((card_x0, card_y0, card_x1, card_y1), radius=40, fill=(255, 255, 255, 236))
+        x0, y0, bw, bh, rows, shop = bubbles[k]
+        draw.rounded_rectangle((x0, y0, x0 + bw, y0 + bh), radius=36,
+                               fill=(0, 132, 255) if shop else (233, 233, 235))
+        for r, row in enumerate(rows):
+            draw.text((x0 + 28, y0 + 14 + r * int(size * 1.3)), row, font=font,
+                      fill="white" if shop else (20, 20, 20))
+        layers.append(layer)
+    return layers
 
 
 def draw_headline(path: Path, text: str) -> None:
@@ -453,12 +502,13 @@ def finish_shot(w: Worker, i: int, shot: dict, clip: Path, d: Path, accent: str,
     chime, and mix the Vietnamese voiceover (Gemini TTS, made by the API) over the H3 sound, which
     drops to 35% under the voice."""
     text, stat, voice = shot.get("on_screen_text", "").strip(), shot.get("stat", "").strip(), shot.get("voice_url")
+    chat = shot.get("chat") or []
     whoosh = came_in in FADE
-    if not (text or stat or voice or whoosh or goes_out in FADE):
+    if not (text or stat or chat or voice or whoosh or goes_out in FADE):
         return clip
     dur = probe_duration(clip)
     inputs = ["-i", str(clip)]
-    graph = [f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps=24,setsar=1[base0]"]
+    graph = [f"[0:v]{UPSCALE},fps=24,setsar=1[base0]"]
     layers = []  # (png, start)
     voice_wav = w.download(voice, d / f"voice_{i}.wav") if voice else None
     spoken = probe_duration(voice_wav) if voice_wav else dur * 0.6
@@ -469,6 +519,10 @@ def finish_shot(w: Worker, i: int, shot: dict, clip: Path, d: Path, accent: str,
             png = d / f"text_{i}_{k}.png"
             layer.save(png)
             layers.append((png, 0.3 + k * step))
+    for k, layer in enumerate(chat_bubbles(chat) if chat else []):
+        png = d / f"chat_{i}_{k}.png"
+        layer.save(png)
+        layers.append((png, min(0.5 + k * 1.1, max(0.5, dur - 1.0))))
     stat_at = min(dur * 0.45, dur - 1.2)
     if stat:
         png = d / f"stat_{i}.png"
@@ -528,7 +582,7 @@ def stage_mix(w: Worker, job: dict, d: Path, clips: list[Path], bgm: Path, name:
     w.progress("ffmpeg:mix", 0.85)
     raw = d / f"raw_{name}"
     inputs = [x for c in clips for x in ("-i", str(c))]
-    norm = "".join(f"[{i}:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps=24,setsar=1[v{i}];"
+    norm = "".join(f"[{i}:v]{UPSCALE},fps=24,setsar=1[v{i}];"
                    f"[{i}:a]aresample=32000,aformat=channel_layouts=stereo[a{i}];" for i in range(len(clips)))
     pairs = "".join(f"[v{i}][a{i}]" for i in range(len(clips)))
     ffmpeg(*inputs, "-filter_complex", f"{norm}{pairs}concat=n={len(clips)}:v=1:a=1[v][a]",
