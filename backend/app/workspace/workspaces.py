@@ -3,13 +3,14 @@ import uuid
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator
 from sqlalchemy import delete, func, select
 
 from app.core import storage
 from app.core.deps import DB, Admin, AnyMember, CurrentUser, Owner
 from app.models import ROLES, Booking, Brand, PublishingJob, User, Workspace, WorkspaceMember
+from app.workspace.invites import InviteOut, create_invite
 
 router = APIRouter(tags=["workspaces"])
 log = logging.getLogger(__name__)
@@ -133,16 +134,17 @@ def list_members(ctx: AnyMember):
     return [MemberOut(user_id=u.id, email=u.email, full_name=u.full_name, role=r) for u, r in rows]
 
 
-@router.post("/workspace/members", response_model=MemberOut, status_code=201)
-def add_member(body: MemberAdd, ctx: Admin):
-    # shortcut: adds an already-registered user; email invitations need an email provider.
+@router.post("/workspace/members", response_model=MemberOut | InviteOut, status_code=201)
+def add_member(body: MemberAdd, ctx: Admin, bg: BackgroundTasks, response: Response):
+    """A registered user joins at once; anyone else gets an email invitation (202)."""
     if body.role == "owner" and ctx.role != "owner":
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "Chỉ chủ cửa hàng mới giao được quyền chủ cửa hàng"
         )
     user = ctx.db.scalar(select(User).where(User.email == body.email.lower()))
     if user is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Người dùng chưa đăng ký tài khoản")
+        response.status_code = status.HTTP_202_ACCEPTED
+        return create_invite(ctx, body.email, body.role, bg)
     exists = ctx.db.scalar(
         select(WorkspaceMember).where(
             WorkspaceMember.workspace_id == ctx.ws_id, WorkspaceMember.user_id == user.id

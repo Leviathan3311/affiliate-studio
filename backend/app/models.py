@@ -95,6 +95,21 @@ class BankTransaction(IdMixin, Base):
     )
 
 
+class Invite(IdMixin, Base):
+    """A staff invitation by email; only the invited address can accept it, through its link."""
+
+    __tablename__ = "workspace_invites"
+    workspace_id: Mapped[uuid.UUID] = ws_fk()
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    role: Mapped[str] = mapped_column(String(32))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    expires_at: Mapped[datetime]
+    accepted_at: Mapped[datetime | None]
+
+
 class WorkspaceMember(IdMixin, Base):
     __tablename__ = "workspace_members"
     __table_args__ = (UniqueConstraint("workspace_id", "user_id"),)

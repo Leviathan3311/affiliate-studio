@@ -46,6 +46,8 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       session.clear();
       session.setToken(access_token);
       if (mode === "register") track("CompleteRegistration");
+      const next = new URLSearchParams(window.location.search).get("next");
+      if (next?.startsWith("/invite")) return router.replace(next); // accept the invitation first
       // keep ?shop=&industry= from the landing page so onboarding is prefilled
       router.replace(mode === "register" ? `/onboarding${window.location.search}` : "/app");
     } catch (err) {

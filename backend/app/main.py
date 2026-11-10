@@ -13,7 +13,7 @@ from app.core import files
 from app.core.config import get_settings
 from app.creative import projects, publishing_api, styles, worker_api
 from app.social import bookings, crm, dashboard, inbox, integrations
-from app.workspace import auth, billing, brand, workspaces
+from app.workspace import auth, billing, brand, invites, workspaces
 
 app = FastAPI(title="GrowthPilot AI API", version="0.2.0")
 settings = get_settings()
@@ -28,7 +28,7 @@ app.add_middleware(
 )
 
 ROUTERS = (
-    (auth, workspaces, brand, billing),
+    (auth, workspaces, brand, billing, invites),
     (projects, styles, publishing_api, worker_api),
     (integrations, inbox, crm, bookings, dashboard),
     (files,),

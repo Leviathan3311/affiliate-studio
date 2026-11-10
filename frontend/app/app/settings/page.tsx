@@ -453,8 +453,10 @@ function AiTab() {
 function MembersTab() {
   const { can, me } = useWorkspace();
   const list = useApi<Member[]>("/workspace/members");
-  const s = useSubmit();
   const admin = can("admin");
+  const invites = useApi<{ id: string; email: string; role: Role; expires_at: string }[]>(admin ? "/workspace/invites" : null);
+  const [invited, setInvited] = useState("");
+  const s = useSubmit();
   return (
     <div className="max-w-4xl">
       {admin && (
@@ -464,21 +466,39 @@ function MembersTab() {
               e.preventDefault();
               const f = form(e);
               const target = e.currentTarget;
-              if (await s.run(() => api("/workspace/members", { method: "POST", json: f }))) {
+              let res: { email?: string; user_id?: string } | undefined;
+              if (await s.run(async () => (res = await api("/workspace/members", { method: "POST", json: f })))) {
                 target.reset();
+                setInvited(res && !res.user_id ? res.email ?? "" : "");
                 list.reload();
+                invites.reload();
               }
             }}
             className="grid gap-4 sm:grid-cols-[1fr_220px_auto] sm:items-start"
             noValidate
           >
-            <Field label="Email đã đăng ký" name="email" type="email" error={s.fe.email} hint="Người này cần tạo tài khoản trước" />
+            <Field label="Email" name="email" type="email" error={s.fe.email} hint="Chưa có tài khoản thì người này nhận email mời, hiệu lực 7 ngày" />
             <Select label="Vai trò" name="role" defaultValue="sales">
               {(Object.keys(ROLE) as Role[]).map((r) => <option key={r} value={r}>{ROLE[r]}</option>)}
             </Select>
             <div className="sm:pt-6"><Button variant="primary" type="submit" busy={s.busy}>Thêm</Button></div>
             {s.error && !Object.keys(s.fe).length && <div className="sm:col-span-3"><ErrorNote error={s.error} /></div>}
+            {invited && <p role="status" className="text-sm text-positive sm:col-span-3">Đã gửi lời mời tới {invited}.</p>}
           </form>
+          {!!invites.data?.length && (
+            <div className="mt-5">
+              <p className="mb-2 text-sm font-medium">Đang chờ nhận lời mời</p>
+              <ul className="divide-y divide-rule">
+                {invites.data.map((i) => (
+                  <li key={i.id} className="flex items-center gap-3 py-2 text-sm">
+                    <span className="min-w-0 flex-1 truncate">{i.email}</span>
+                    <span className="text-muted">{ROLE[i.role]}</span>
+                    <Button variant="ghost" onClick={async () => { await api(`/workspace/invites/${i.id}`, { method: "DELETE" }); invites.reload(); }}>Huỷ</Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Panel>
       )}
       {list.loading && <Skeleton rows={3} />}
