@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.engagement_agent import analyze_conversation
 from app.ai.llm import LLMUnavailable
+from app.core.config import get_settings
 from app.core.db import utcnow
 from app.core.observability import trace
 from app.core.plan import is_active
@@ -32,6 +33,7 @@ from app.models import (
 )
 from app.social import meta
 from app.social.policy import POLICY_VERSION, ActiveHours, PolicyInput, evaluate
+from app.workspace.alerts import email_team
 
 OPT_OUT = re.compile(
     r"\b(stop|unsubscribe)\b|dừng nhắn|ngừng nhắn|không nhận tin|h[uủ]y đăng ký|đừng nhắn",
@@ -337,4 +339,12 @@ def _notify_high_intent(db: Session, ws: Workspace, conv: Conversation, out, now
             customer_id=conv.customer_id,
             dedupe_key=key,
         )
+    )
+    link = f"{get_settings().frontend_url}/app/inbox"
+    email_team(
+        db,
+        ws.id,
+        ("owner", "admin", "sales"),
+        f"Khách muốn mua: {customer.display_name}",
+        f"{customer.display_name} vừa nhắn: {out.summary}\n\nVào hộp thư để trả lời ngay: {link}",
     )

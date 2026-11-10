@@ -211,3 +211,15 @@ def test_worker_survives_a_database_outage(monkeypatch):
     except SystemExit:
         pass
     assert len(calls) == 3
+
+
+def test_high_intent_is_emailed_to_the_team_once(client, db, spa, llm, monkeypatch):
+    from app.core import mail
+
+    sent = []
+    monkeypatch.setattr(mail, "send", lambda to, subject, body: sent.append((to, subject)))
+    deliver(client, db, "mid.9", "Em muốn đặt lịch chăm sóc da", DAY)
+    conv = db.scalar(select(Conversation))
+    run_agent(db, conv, DAY)
+    run_agent(db, conv, DAY + timedelta(hours=1))
+    assert len(sent) == 1 and sent[0][1].startswith("Khách muốn mua")

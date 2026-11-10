@@ -23,6 +23,7 @@ from app.creative.publishing import due_jobs, run_job
 from app.models import Conversation, MediaJob, WebhookEvent, Workspace
 from app.social.engagement import ingest_event, run_agent
 from app.social.integrations import accept_webhook
+from app.workspace.alerts import remind_plans
 
 log = logging.getLogger("growthpilot.worker")
 MAX_ATTEMPTS = 5
@@ -143,6 +144,18 @@ def sync_knowledge(db: Session) -> int:
     return done
 
 
+_last_reminder = 0.0
+
+
+def remind(db: Session) -> int:
+    """Plan reminders twice an hour (cheap, but no need to scan every shop every 2 s)."""
+    global _last_reminder
+    if time.monotonic() - _last_reminder < 1800:
+        return 0
+    _last_reminder = time.monotonic()
+    return remind_plans(db)
+
+
 def run_once() -> int:
     with SessionLocal() as db:
         if requeue_stale(db):
@@ -158,6 +171,7 @@ def run_once() -> int:
         except httpx.HTTPError:
             log.warning("upstash unreachable; will retry")
             edge = 0
+        remind(db)
         return edge + process_webhooks(db) + process_agent_queue(db) + process_publishing(db)
 
 

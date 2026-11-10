@@ -158,3 +158,24 @@ def test_unmatched_transfer_waits_for_the_admin_to_assign(client, db, admin, mon
         headers=admin,
     )
     assert again.status_code == 409
+
+
+def test_plan_reminders_email_the_owner_once(client, db, monkeypatch):
+    import uuid
+
+    from app.core import mail
+    from app.workspace.alerts import remind_plans
+
+    sent = []
+    monkeypatch.setattr(mail, "send", lambda to, subject, body: sent.append((to, subject)))
+    h = signup(client)
+    ws = db.get(Workspace, uuid.UUID(h["X-Workspace-Id"]))
+    ws.created_at = utcnow() - timedelta(days=get_settings().trial_days - 2)  # 2 days left
+    db.commit()
+    assert remind_plans(db) == 1 and remind_plans(db) == 0
+    assert sent[0][0] == "owner@spa.vn" and "hết hạn ngày" in sent[0][1]
+
+    ws.created_at = utcnow() - timedelta(days=get_settings().trial_days, hours=2)  # just expired
+    db.commit()
+    assert remind_plans(db) == 1
+    assert "đã hết hạn" in sent[-1][1]
