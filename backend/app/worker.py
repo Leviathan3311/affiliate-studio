@@ -179,6 +179,10 @@ def main() -> None:
             )
             time.sleep(backoff)
             backoff = min(backoff * 2, 60)
+        except Exception:  # one bad record must not stop every shop's posts and replies
+            log.exception("worker loop error; continuing")
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 60)
         flush()
 
 

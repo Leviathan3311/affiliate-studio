@@ -9,9 +9,12 @@ _hits: dict[str, deque[float]] = defaultdict(deque)
 
 
 def client_ip(request: Request) -> str:
-    # Behind the Cloudflare tunnel the visitor's address arrives in CF-Connecting-IP.
-    return request.headers.get("cf-connecting-ip") or (
-        request.client.host if request.client else ""
+    # cf-connecting-ip through the tunnel; x-client-ip through the Cloudflare proxy in front of Modal
+    h = request.headers
+    return (
+        h.get("cf-connecting-ip")
+        or h.get("x-client-ip")
+        or (request.client.host if request.client else "")
     )
 
 
