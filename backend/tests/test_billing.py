@@ -130,3 +130,31 @@ def test_sepay_ignores_unknown_code_and_small_amounts(client, db, monkeypatch):
     _sepay(client, "GP FFFFFFFF", 499000, tx_id=2)
     _sepay(client, f"GP {ws_id.hex[:8]}", 100000, tx_id=3)
     assert client.get("/api/v1/billing", headers=h).json()["status"] == "expired"
+
+
+def test_unmatched_transfer_waits_for_the_admin_to_assign(client, db, admin, monkeypatch):
+    import uuid
+
+    monkeypatch.setattr(get_settings(), "sepay_api_key", "k")
+    h = signup(client)
+    ws_id = uuid.UUID(h["X-Workspace-Id"])
+    _expire(db, ws_id)
+    _sepay(client, "chuyen tien phi phan mem", 499000, tx_id=9)  # forgot the GP code
+    _sepay(client, "chuyen tien phi phan mem", 499000, tx_id=9)  # SePay retry
+    rows = client.get("/api/v1/admin/bank-transactions", headers=admin).json()
+    assert [(r["amount_vnd"], r["status"]) for r in rows] == [(499000, "unmatched")]
+    assert client.get("/api/v1/admin/bank-transactions", headers=h).status_code == 403
+
+    r = client.post(
+        f"/api/v1/admin/bank-transactions/{rows[0]['id']}/assign",
+        json={"workspace_id": str(ws_id), "months": 1},
+        headers=admin,
+    )
+    assert r.status_code == 200 and r.json()["status"] == "assigned"
+    assert client.get("/api/v1/billing", headers=h).json()["status"] == "active"
+    again = client.post(
+        f"/api/v1/admin/bank-transactions/{rows[0]['id']}/assign",
+        json={"workspace_id": str(ws_id), "months": 1},
+        headers=admin,
+    )
+    assert again.status_code == 409

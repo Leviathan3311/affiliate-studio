@@ -17,6 +17,17 @@ export interface Billing {
   transfer: { bank_bin: string; account: string; account_name: string; content: string; qr_url: string | null };
 }
 
+export interface BankTx {
+  id: string;
+  created_at: string;
+  amount_vnd: number;
+  content: string;
+  reference: string;
+  status: "applied" | "unmatched" | "assigned" | "ignored";
+  workspace_id: string | null;
+  workspace_name: string;
+}
+
 export interface AdminWorkspace {
   id: string;
   name: string;

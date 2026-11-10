@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Annotated
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
@@ -19,7 +19,7 @@ from app.core.config import get_settings
 from app.core.db import utcnow
 from app.core.deps import DB, AnyMember, CurrentUser
 from app.core.plan import _aware, access_until, is_active
-from app.models import Notification, Payment, User, Workspace, WorkspaceMember
+from app.models import BankTransaction, Notification, Payment, User, Workspace, WorkspaceMember
 
 router = APIRouter(tags=["billing"])
 log = logging.getLogger(__name__)
@@ -182,23 +182,106 @@ async def sepay_webhook(request: Request, db: DB, authorization: str = Header(de
     if not key or not hmac.compare_digest(authorization, f"Apikey {key}"):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid API key")
     tx = await request.json()
-    ref = f"SePay #{tx.get('id')}"
     amount = int(tx.get("transferAmount") or 0)
-    match = CODE.search(str(tx.get("content") or ""))
-    if tx.get("transferType") != "in" or not match or amount <= 0:
-        return {"success": True}  # not a GrowthPilot payment
-    if db.scalar(select(Payment.id).where(Payment.note.startswith(ref + " "))):
-        return {"success": True}  # SePay retried a transfer we already counted
-    code = match.group(1).lower()
-    hits = [ws for ws in db.scalars(select(Workspace)) if ws.id.hex.startswith(code)]
-    months = amount // get_settings().plan_price_vnd
-    if len(hits) != 1 or months < 1:
-        log.warning(
-            "sepay %s: %s VND for code %s not applied (%s workspaces)", ref, amount, code, len(hits)
-        )
-        return {"success": True}  # logged: the admin decides by hand in /app/admin
-    extend(
-        db, hits[0], months, amount, f"{ref} · {tx.get('referenceCode') or ''} · tự động".strip()
+    if tx.get("transferType") != "in" or amount <= 0:
+        return {"success": True}
+    ext = f"sepay:{tx.get('id')}"
+    if db.scalar(select(BankTransaction.id).where(BankTransaction.external_id == ext)):
+        return {"success": True}  # SePay retried a transfer we already recorded
+    content = str(tx.get("content") or "")
+    row = BankTransaction(
+        external_id=ext,
+        amount_vnd=amount,
+        content=content[:2000],
+        reference=str(tx.get("referenceCode") or "")[:64],
+        status="unmatched",
     )
+    match = CODE.search(content)
+    hits = []
+    if match:
+        code = match.group(1).lower()
+        hits = [ws for ws in db.scalars(select(Workspace)) if ws.id.hex.startswith(code)]
+    if len(hits) == 1:
+        row.workspace_id = hits[0].id
+        months = amount // get_settings().plan_price_vnd
+        if months >= 1:
+            extend(
+                db, hits[0], months, amount, f"SePay #{tx.get('id')} · {row.reference} · tự động"
+            )
+            row.status = "applied"
+    db.add(row)
     db.commit()
+    if row.status == "unmatched":
+        log.warning("sepay %s: %s VND not applied, waiting for the admin", ext, amount)
     return {"success": True}
+
+
+class BankTxOut(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    amount_vnd: int
+    content: str
+    reference: str
+    status: str
+    workspace_id: uuid.UUID | None
+    workspace_name: str = ""
+
+
+class AssignIn(BaseModel):
+    workspace_id: uuid.UUID
+    months: int = Field(ge=1, le=36)
+
+
+@router.get("/admin/bank-transactions", response_model=list[BankTxOut])
+def bank_transactions(_: PlatformAdmin, db: DB, status_: str = Query("unmatched", alias="status")):
+    q = select(BankTransaction).order_by(BankTransaction.created_at.desc()).limit(200)
+    if status_ != "all":
+        q = q.where(BankTransaction.status == status_)
+    out = []
+    for t in db.scalars(q):
+        ws = db.get(Workspace, t.workspace_id) if t.workspace_id else None
+        out.append(
+            BankTxOut(
+                id=t.id,
+                created_at=_aware(t.created_at),
+                amount_vnd=t.amount_vnd,
+                content=t.content,
+                reference=t.reference,
+                status=t.status,
+                workspace_id=t.workspace_id,
+                workspace_name=ws.name if ws else "",
+            )
+        )
+    return out
+
+
+def _unmatched(db, tx_id: uuid.UUID) -> BankTransaction:
+    t = db.get(BankTransaction, tx_id)
+    if t is None or t.status != "unmatched":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Giao dịch này đã được xử lý")
+    return t
+
+
+@router.post("/admin/bank-transactions/{tx_id}/assign", response_model=BankTxOut)
+def assign_transaction(tx_id: uuid.UUID, body: AssignIn, admin: PlatformAdmin, db: DB):
+    t = _unmatched(db, tx_id)
+    ws = db.get(Workspace, body.workspace_id)
+    if ws is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy cửa hàng")
+    extend(
+        db,
+        ws,
+        body.months,
+        t.amount_vnd,
+        f"SePay {t.external_id} · {t.reference} · gán tay",
+        admin.id,
+    )
+    t.status, t.workspace_id = "assigned", ws.id
+    db.commit()
+    return next(x for x in bank_transactions(admin, db, status_="all") if x.id == t.id)
+
+
+@router.post("/admin/bank-transactions/{tx_id}/ignore", status_code=204)
+def ignore_transaction(tx_id: uuid.UUID, _: PlatformAdmin, db: DB):
+    _unmatched(db, tx_id).status = "ignored"
+    db.commit()

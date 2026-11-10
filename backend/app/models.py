@@ -79,6 +79,22 @@ class Payment(IdMixin, Base):
     )
 
 
+class BankTransaction(IdMixin, Base):
+    """Every incoming transfer SePay reports, matched or not, so none is lost."""
+
+    __tablename__ = "bank_transactions"
+    external_id: Mapped[str] = mapped_column(String(64), unique=True)  # "sepay:<id>"
+    amount_vnd: Mapped[int]
+    content: Mapped[str] = mapped_column(Text, default="")
+    reference: Mapped[str] = mapped_column(String(64), default="")
+    status: Mapped[str] = mapped_column(
+        String(16), index=True
+    )  # applied|unmatched|assigned|ignored
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="SET NULL")
+    )
+
+
 class WorkspaceMember(IdMixin, Base):
     __tablename__ = "workspace_members"
     __table_args__ = (UniqueConstraint("workspace_id", "user_id"),)
