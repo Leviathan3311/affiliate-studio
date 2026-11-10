@@ -5,9 +5,11 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 
+from app.ai import agents
+from app.ai.llm import LLMUnavailable
 from app.core import storage
 from app.core.db import utcnow
 from app.core.deps import Marketing
@@ -268,3 +270,25 @@ def post_photo(body: PhotoPostIn, ctx: Marketing):
         )
         for acc in body.social_account_ids
     ]
+
+
+class CaptionIn(BaseModel):
+    object_id: uuid.UUID
+    hint: str = Field(default="", max_length=500)
+
+
+@router.post("/photos/caption")
+def photo_caption(body: CaptionIn, ctx: Marketing):
+    obj = ctx.get(StorageObject, body.object_id)
+    image = storage.read_bytes(obj.key, 8 * 1024 * 1024)
+    if image is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ảnh chưa tải lên xong")
+    try:
+        caption, tags = agents.write_photo_caption(
+            ctx.db, ctx.ws_id, image, obj.mime_type, body.hint
+        )
+    except (LLMUnavailable, ValidationError):
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "AI đang bận, thử lại sau ít phút"
+        ) from None
+    return {"caption": caption + ("\n\n" + " ".join(tags) if tags else "")}

@@ -7,6 +7,7 @@ Every finished deliverable is saved as an artifact version; chat replies are nev
 import base64
 import json
 import re
+import uuid
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -20,7 +21,7 @@ from pydantic import (
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.knowledge import build_context, documents, extract_prices, sql_facts
+from app.ai.knowledge import build_context, documents, extract_prices, industry_of, sql_facts
 from app.ai.llm import gemini_json
 from app.core import storage
 from app.models import Brand, Project, ProjectInput, Service, StorageObject
@@ -646,3 +647,46 @@ def brand_facts(db: Session, project: Project) -> list[str]:
     brand = db.scalar(select(Brand).where(Brand.workspace_id == project.workspace_id))
     facts = [f"Brand name: {brand.name}"] if brand else []
     return facts
+
+
+# --- caption for a photo the shop posts itself ---
+
+
+class PhotoCaption(BaseModel):
+    caption: str
+    hashtags: Texts = []
+
+
+def write_photo_caption(
+    db: Session, workspace_id: uuid.UUID, image: bytes, mime: str, hint: str = ""
+) -> tuple[str, list[str]]:
+    """Look at the photo and write a Vietnamese post in the shop's voice, using only its own facts."""
+    brand = db.scalar(select(Brand).where(Brand.workspace_id == workspace_id))
+    knowledge, allowed = build_context(db, workspace_id, hint or "bài đăng ảnh")
+    system = f"""Bạn viết bài đăng Facebook/Instagram cho {industry_of(brand)} "{brand.name if brand else ""}".
+Nhìn ảnh, viết 3-6 câu tiếng Việt tự nhiên: câu đầu gây chú ý, mô tả đúng thứ có trong ảnh, một lời kêu gọi \
+(nhắn tin, ghé cửa hàng, đặt hàng). Giọng: {(brand.tone_of_voice if brand else "") or "thân thiện"}.
+Không được nói: {(brand.forbidden_claims if brand else "") or "(không có)"}.
+{GUARDRAILS}
+- Không dùng "100%", "24/7", "số 1", "tuyệt đối", "cam kết". Không bịa con số.
+Trả JSON {{"caption": "...", "hashtags": ["#..."]}} (3-6 hashtag tiếng Việt không dấu)."""
+    text = f"DỮ LIỆU THƯƠNG HIỆU:\n{knowledge or '(chưa có)'}\n\nGợi ý của chủ cửa hàng: {hint or '(không có)'}"
+    res = gemini_json(
+        db,
+        system=system,
+        parts=[
+            {"text": text},
+            {"inline_data": {"mime_type": mime, "data": base64.b64encode(image).decode()}},
+        ],
+        purpose="publishing.photo_caption",
+        workspace_id=workspace_id,
+    )
+    out = PhotoCaption.model_validate(res.data)
+    caption = out.caption.strip()
+    # A price the shop never entered is taken out; its real prices stay.
+    price = re.compile(r"\d[\d.,]*\s*(?:đ|đồng|vnd|k|nghìn|ngàn|triệu)(?!\w)", re.IGNORECASE)
+    caption = price.sub(
+        lambda m: m.group(0) if extract_prices(m.group(0)) <= allowed else "", caption
+    )
+    caption = re.sub(r"[ \t]{2,}", " ", caption).strip()
+    return caption, [h if h.startswith("#") else f"#{h}" for h in out.hashtags][:6]

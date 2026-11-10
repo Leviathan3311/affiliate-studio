@@ -806,3 +806,44 @@ def test_photo_post_upload_and_schedule(client):
         headers=h,
     )
     assert bad.status_code == 415
+
+
+def test_ai_caption_for_a_photo_drops_invented_prices(client, monkeypatch):
+    import uuid as _uuid
+
+    from app.ai import agents
+    from app.ai.llm import GeminiResult
+    from app.core import db as app_db
+    from app.core import storage
+    from app.models import StorageObject
+
+    h = signup(client)
+    client.post("/api/v1/services", json={"name": "Cà phê muối", "price_min": 35000}, headers=h)
+    r = client.post(
+        "/api/v1/publishing-jobs/photos/presign",
+        json={"filename": "ly.png", "content_type": "image/png", "byte_size": 4},
+        headers=h,
+    ).json()
+    with app_db.SessionLocal() as db:
+        storage.put_bytes(
+            db.get(StorageObject, _uuid.UUID(r["object_id"])).key, b"\x89PNG", "image/png"
+        )
+    seen = {}
+
+    def fake(db, *, system, parts, purpose, workspace_id, **_):
+        seen["image"] = parts[1]["inline_data"]["mime_type"]
+        data = {
+            "caption": "Cà phê muối 35.000đ, combo chỉ 99.000đ hôm nay!",
+            "hashtags": ["caphemuoi", "#saigon"],
+        }
+        return GeminiResult(data=data, model="fake", sources=[])
+
+    monkeypatch.setattr(agents, "gemini_json", fake)
+    out = client.post(
+        "/api/v1/publishing-jobs/photos/caption",
+        json={"object_id": r["object_id"], "hint": "món mới"},
+        headers=h,
+    )
+    assert out.status_code == 200 and seen["image"] == "image/png"
+    text = out.json()["caption"]
+    assert "99.000đ" not in text and "35.000đ" in text and "#caphemuoi #saigon" in text

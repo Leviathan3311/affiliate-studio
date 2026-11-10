@@ -80,25 +80,59 @@ function PhotoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
   const [when, setWhen] = useState("");
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [objectId, setObjectId] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [hint, setHint] = useState("");
+  const [writing, setWriting] = useState(false);
   const connected = (accounts.data ?? []).filter((a) => a.status === "connected");
   const chosen = picked ?? connected.map((a) => a.id);
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : ""), [file]);
 
-  async function submit() {
-    if (!file) return setError(new ApiError(422, "Chọn một ảnh"));
-    setBusy(true);
+  // Upload as soon as a photo is picked, so the AI can look at it before posting.
+  async function choose(f: File | null) {
+    setFile(f);
+    setObjectId("");
     setError(null);
+    if (!f) return;
+    setUploading(true);
     try {
       const up = await api<{ object_id: string; upload_url: string; headers: Record<string, string> }>(
         "/publishing-jobs/photos/presign",
-        { method: "POST", json: { filename: file.name, content_type: file.type, byte_size: file.size } },
+        { method: "POST", json: { filename: f.name, content_type: f.type, byte_size: f.size } },
       );
-      const put = await fetch(up.upload_url, { method: "PUT", headers: up.headers, body: file });
+      const put = await fetch(up.upload_url, { method: "PUT", headers: up.headers, body: f });
       if (!put.ok) throw new ApiError(put.status, "Tải ảnh lên chưa được, thử lại");
+      setObjectId(up.object_id);
+    } catch (e) {
+      setError(e as ApiError);
+    }
+    setUploading(false);
+  }
+
+  async function write() {
+    setWriting(true);
+    setError(null);
+    try {
+      const { caption: text } = await api<{ caption: string }>("/publishing-jobs/photos/caption", {
+        method: "POST",
+        json: { object_id: objectId, hint },
+      });
+      setCaption(text);
+    } catch (e) {
+      setError(e as ApiError);
+    }
+    setWriting(false);
+  }
+
+  async function submit() {
+    if (!objectId) return setError(new ApiError(422, "Chọn một ảnh"));
+    setBusy(true);
+    setError(null);
+    try {
       await api("/publishing-jobs/photos", {
         method: "POST",
         json: {
-          object_id: up.object_id,
+          object_id: objectId,
           caption,
           social_account_ids: chosen,
           scheduled_at: when ? new Date(when).toISOString() : null,
@@ -119,7 +153,7 @@ function PhotoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
       footer={
         <>
           <Button onClick={onClose}>Huỷ</Button>
-          <Button variant="primary" busy={busy} disabled={!file || !chosen.length} onClick={submit}>
+          <Button variant="primary" busy={busy} disabled={!objectId || !chosen.length} onClick={submit}>
             {when ? "Lên lịch" : "Đăng ngay"}
           </Button>
         </>
@@ -134,8 +168,15 @@ function PhotoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
           ) : (
             <span>Chọn ảnh JPG, PNG hoặc WEBP, tối đa 8 MB</span>
           )}
-          <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => choose(e.target.files?.[0] ?? null)} />
+          {uploading && <span>Đang tải ảnh lên…</span>}
         </label>
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1">
+            <Field label="Gợi ý cho AI (không bắt buộc)" name="hint" value={hint} onChange={(e) => setHint(e.target.value)} placeholder="Ví dụ: món mới, giảm 10% tuần này" />
+          </div>
+          <Button busy={writing} disabled={!objectId} onClick={write}>AI viết nội dung</Button>
+        </div>
         <Field label="Nội dung bài đăng" name="caption" textarea rows={4} value={caption} onChange={(e) => setCaption(e.target.value)} hint="Instagram nhận tối đa 2.200 ký tự" />
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1 font-medium">Đăng lên</legend>
