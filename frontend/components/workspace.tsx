@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, session } from "@/lib/api";
 import type { Me, Workspace } from "@/lib/types";
@@ -33,6 +33,7 @@ async function loadState(): Promise<State | "login" | "onboarding"> {
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [state, setState] = useState<State | null>(null);
 
   const load = useCallback(async () => {
@@ -47,7 +48,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       .then((next) => (typeof next === "string" ? router.replace(`/${next}`) : setState(next)));
   }, [router]);
 
-  if (!state) {
+  // A platform admin can extend any shop's plan: enrol the second factor before anything else.
+  const mustEnrol = state?.me.is_platform_admin && !state.me.mfa_enabled && pathname !== "/app/admin";
+  useEffect(() => {
+    if (mustEnrol) router.replace("/app/admin");
+  }, [mustEnrol, router]);
+  if (!state || mustEnrol) {
     return (
       <div className="grid min-h-screen place-items-center text-sm text-muted" role="status">
         Đang tải…
