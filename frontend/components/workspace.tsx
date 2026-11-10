@@ -1,9 +1,10 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, session } from "@/lib/api";
 import type { Me, Workspace } from "@/lib/types";
+import { EnrolScreen } from "./two-factor";
 
 interface Ctx {
   me: Me;
@@ -33,7 +34,6 @@ async function loadState(): Promise<State | "login" | "onboarding"> {
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [state, setState] = useState<State | null>(null);
 
   const load = useCallback(async () => {
@@ -48,18 +48,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       .then((next) => (typeof next === "string" ? router.replace(`/${next}`) : setState(next)));
   }, [router]);
 
-  // A platform admin can extend any shop's plan: enrol the second factor before anything else.
-  const mustEnrol = state?.me.is_platform_admin && !state.me.mfa_enabled && pathname !== "/app/admin";
-  useEffect(() => {
-    if (mustEnrol) router.replace("/app/admin");
-  }, [mustEnrol, router]);
-  if (!state || mustEnrol) {
+  if (!state) {
     return (
       <div className="grid min-h-screen place-items-center text-sm text-muted" role="status">
         Đang tải…
       </div>
     );
   }
+  // A platform admin can extend any shop's plan: the whole app waits for the second factor.
+  if (state.me.is_platform_admin && !state.me.mfa_enabled) return <EnrolScreen />;
   const role = state.workspace.role;
   return (
     <WorkspaceContext.Provider

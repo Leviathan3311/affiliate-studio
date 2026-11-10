@@ -7,6 +7,7 @@ import { api, ApiError, session } from "@/lib/api";
 import { LegalLinks } from "./legal";
 import { track } from "./pixel";
 import { Mark } from "./shell";
+import { CodeStep } from "./two-factor";
 import { Button, ErrorNote, Field } from "./ui";
 
 export function AuthCard({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
@@ -50,10 +51,6 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     setBusy(true);
     setError(null);
     try {
-      if (mfaToken) {
-        await api("/auth/2fa/verify", { method: "POST", json: { mfa_token: mfaToken, code: form.code } });
-        return signedIn();
-      }
       const res = await api<{ mfa_required: boolean; mfa_token: string }>(`/auth/${mode}`, { method: "POST", json: form });
       if (res.mfa_required) {
         setMfaToken(res.mfa_token);
@@ -67,23 +64,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     }
   }
 
-  if (mfaToken)
-    return (
-      <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-        {error && <ErrorNote error={error} />}
-        <Field
-          label="Mã xác thực 6 số"
-          name="code"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          autoFocus
-          hint="Mở app Google Authenticator hoặc app xác thực bạn đã cài"
-        />
-        <Button variant="primary" type="submit" busy={busy} className="mt-1 h-10">
-          Xác nhận
-        </Button>
-      </form>
-    );
+  if (mfaToken) return <CodeStep mfaToken={mfaToken} onDone={signedIn} onBack={() => setMfaToken("")} />;
 
   const f = error?.fields ?? {};
   return (

@@ -18,7 +18,6 @@ export default function AdminPage() {
   const [tab, setTab] = useState<"shops" | "users">("shops");
 
   if (!me.is_platform_admin) return <Empty title="Trang này chỉ dành cho quản trị GrowthPilot" />;
-  if (!me.mfa_enabled) return <MfaSetup />;
   return (
     <>
       <PageTitle title="Quản trị" sub="Tất cả cửa hàng và tài khoản dùng GrowthPilot. Khi tiền chuyển khoản về, tìm theo nội dung (GP …) rồi gia hạn." />
@@ -186,57 +185,6 @@ function Unmatched({ shops, price, onDone }: { shops: AdminWorkspace[]; price: n
         ))}
       </div>
     </Panel>
-  );
-}
-
-/** Platform admins can extend any shop's plan, so their account needs a second factor first. */
-function MfaSetup() {
-  const setup = useApi<{ secret: string; otpauth_url: string }>("/auth/2fa/setup");
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<ApiError | null>(null);
-  const [busy, setBusy] = useState(false);
-  const key = setup.data?.secret.replace(/(.{4})/g, "$1 ").trim();
-  return (
-    <>
-      <PageTitle title="Bật xác thực hai lớp" sub="Tài khoản quản trị gia hạn được mọi cửa hàng, nên cần thêm mã 6 số mỗi lần đăng nhập." />
-      <Panel className="max-w-xl">
-        {setup.error && <ErrorNote error={setup.error} />}
-        {!setup.data ? (
-          <Skeleton rows={3} />
-        ) : (
-          <form
-            className="flex flex-col gap-4 text-sm"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setBusy(true);
-              setError(null);
-              try {
-                await api("/auth/2fa/enable", { method: "POST", json: { secret: setup.data!.secret, code } });
-                window.location.reload();
-              } catch (err) {
-                setError(err as ApiError);
-                setBusy(false);
-              }
-            }}
-          >
-            <ol className="flex list-decimal flex-col gap-2 pl-5">
-              <li>Cài Google Authenticator, Microsoft Authenticator hoặc app xác thực bất kỳ trên điện thoại.</li>
-              <li>
-                Chọn <b>Thêm mã → Nhập khoá thiết lập</b>, tên tài khoản GrowthPilot, khoá:
-                <p className="mt-1 select-all rounded-md bg-raised px-3 py-2 font-mono text-base tracking-wider">{key}</p>
-                Trên điện thoại có thể <a href={setup.data.otpauth_url} className="underline">bấm vào đây</a> để mở thẳng app.
-              </li>
-              <li>Nhập mã 6 số app hiện ra.</li>
-            </ol>
-            {error && <ErrorNote error={error} />}
-            <Field label="Mã 6 số" name="code" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} />
-            <div>
-              <Button variant="primary" type="submit" busy={busy}>Bật xác thực hai lớp</Button>
-            </div>
-          </form>
-        )}
-      </Panel>
-    </>
   );
 }
 
