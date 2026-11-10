@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     gemini_search: bool = False
     gemini_embedding_model: str = "gemini-embedding-2"
     # Vietnamese voiceover per shot (app/ai/speech.py); the first model that answers is used
+    # Voiceover: "vieneu" runs VieNeu-TTS on Modal (MODAL_APP's Voice class), Gemini TTS is the fallback.
+    tts_engine: str = "vieneu"
+    tts_voice: str = "Mỹ Duyên"
+    tts_temperature: float = 0.8
     gemini_tts_models: list[str] = ["gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"]
     gemini_tts_voice: str = "Sulafat"  # "warm"
     gemini_tts_style: str = "warm, calm and gentle, like a friendly shop consultant"

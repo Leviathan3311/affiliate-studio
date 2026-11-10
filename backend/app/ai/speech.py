@@ -1,4 +1,7 @@
-"""Vietnamese voiceover with Gemini TTS (Interactions API): one WAV per shot, 24 kHz mono 16-bit.
+"""Vietnamese voiceover: one WAV per shot.
+
+VieNeu-TTS (voice Mỹ Duyên) on Modal CPU first; Gemini TTS (Interactions API, 24 kHz) when Modal
+is not configured or fails, so a voice outage never blocks a video.
 
 The video model only makes sound effects; its Vietnamese speech is not usable, so the spoken line
 of each shot is synthesised here and mixed in by the notebook.
@@ -6,6 +9,7 @@ of each shot is synthesised here and mixed in by the notebook.
 
 import base64
 import io
+import logging
 import wave
 
 import httpx
@@ -14,9 +18,28 @@ from app.ai.llm import LLMUnavailable
 from app.core.config import get_settings
 
 URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
+log = logging.getLogger(__name__)
 
 
 def speak(text: str) -> bytes:
+    s = get_settings()
+    if s.tts_engine == "vieneu" and s.modal_app:
+        try:
+            return _vieneu(text)
+        except Exception as e:  # noqa: BLE001 — any Modal failure falls back to Gemini
+            log.warning("vieneu tts failed, using gemini: %s", type(e).__name__)
+    return _gemini(text)
+
+
+def _vieneu(text: str) -> bytes:
+    import modal
+
+    s = get_settings()
+    voice = modal.Cls.from_name(s.modal_app, "Voice")()
+    return voice.speak.remote(text, s.tts_voice, s.tts_temperature)
+
+
+def _gemini(text: str) -> bytes:
     s = get_settings()
     if not s.gemini_api_key:
         raise LLMUnavailable("no api key")

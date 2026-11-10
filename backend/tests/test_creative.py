@@ -688,3 +688,19 @@ def test_research_accepts_objects_where_strings_were_asked():
         }
     )
     assert out.target_audience == ["Chủ quán cafe · TP.HCM"]
+
+
+def test_voiceover_uses_vieneu_and_falls_back_to_gemini(monkeypatch):
+    from app.ai import speech
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "modal_app", "growthpilot")
+    monkeypatch.setattr(speech, "_gemini", lambda text: b"gemini")
+    monkeypatch.setattr(speech, "_vieneu", lambda text: b"vieneu")
+    assert speech.speak("Xin chào") == b"vieneu"
+
+    def down(text):
+        raise RuntimeError("modal down")
+
+    monkeypatch.setattr(speech, "_vieneu", down)
+    assert speech.speak("Xin chào") == b"gemini"

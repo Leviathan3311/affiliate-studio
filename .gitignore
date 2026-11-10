@@ -25,3 +25,5 @@ backend/certs/
 
 # local code graph from the graphify tool
 graphify-out/
+.tts-samples/
+.ops/

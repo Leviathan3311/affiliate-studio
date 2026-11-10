@@ -77,3 +77,41 @@ def studio() -> None:
     nb1.setup()
     if worker.run(nb1.handle, max_idle_minutes=float(os.environ.get("GP_MAX_IDLE_MIN", "2"))) == "gpu_lost":
         studio.spawn()  # runs on a fresh machine once this container has exited (max_containers=1)
+
+
+# --- Vietnamese voiceover: VieNeu-TTS v3 Turbo (Apache-2.0), ONNX on CPU, no GPU needed ---
+
+
+def _fetch_vieneu() -> None:
+    from vieneu import Vieneu
+
+    Vieneu()  # downloads the model and preset voices into the image's Hugging Face cache
+
+
+voice_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    # onnxruntime 1.23+ refuses the model's external weights when they sit in the HF cache as symlinks
+    .pip_install("vieneu==3.8.3", "onnxruntime==1.22.1", "soundfile")
+    .run_function(_fetch_vieneu)
+)
+
+
+@app.cls(image=voice_image, cpu=4, memory=4096, scaledown_window=300, timeout=600)
+class Voice:
+    @modal.enter()
+    def load(self) -> None:
+        from vieneu import Vieneu
+
+        self.tts = Vieneu()
+
+    @modal.method()
+    def speak(self, text: str, voice: str = "Mỹ Duyên", temperature: float = 0.8) -> bytes:
+        """One line of voiceover as a 48 kHz mono 16-bit WAV."""
+        import io
+
+        import soundfile as sf
+
+        audio = self.tts.infer(text, voice=voice, temperature=temperature)
+        buf = io.BytesIO()
+        sf.write(buf, audio, self.tts.sample_rate, subtype="PCM_16", format="WAV")
+        return buf.getvalue()
