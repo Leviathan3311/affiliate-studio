@@ -69,6 +69,7 @@ export const ROLE: Record<Role, string> = {
 
 export const FLAG: Record<string, string> = {
   unverified_price: "AI nhắc tới giá không có trong bảng giá",
+  absolute_claim: "Có lời cam kết tuyệt đối (100%, 24/7, số 1…): Meta dễ từ chối quảng cáo",
   non_vietnamese_output: "Câu trả lời có ký tự ngoài tiếng Việt",
   llm_unavailable: "AI tạm thời không phản hồi (hết hạn mức hoặc lỗi mạng)",
   invalid_ai_output: "AI trả lời chưa trọn vẹn",

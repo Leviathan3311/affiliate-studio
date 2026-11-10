@@ -704,3 +704,32 @@ def test_voiceover_uses_vieneu_and_falls_back_to_gemini(monkeypatch):
 
     monkeypatch.setattr(speech, "_vieneu", down)
     assert speech.speak("Xin chào") == b"gemini"
+
+
+def test_invented_stat_cards_are_dropped_and_absolute_claims_flagged(client, db):
+    import uuid
+
+    from app.ai.agents import _script_flags
+    from app.models import Project
+
+    h = signup(client)
+    client.post(
+        "/api/v1/services",
+        json={"name": "Gội đầu", "price_min": 150000, "promotion": "Giảm 20 phút"},
+        headers=h,
+    )
+    p = Project(workspace_id=uuid.UUID(h["X-Workspace-Id"]), name="P", brief="Dùng thử 14 ngày")
+    db.add(p)
+    db.commit()
+    shot = {"on_screen_text": "x", "voiceover": "", "stat": ""}
+    variant = {
+        "hook": "AI trả lời 24/7",
+        "key_message": "",
+        "cta": "",
+        "caption": "",
+        "voiceover": "",
+        "shots": [{**shot, "stat": "100%"}, {**shot, "stat": "14 ngày"}, {**shot, "stat": "98%"}],
+    }
+    flags = _script_flags(db, p, variant)
+    assert [s["stat"] for s in variant["shots"]] == ["", "14 ngày", ""]
+    assert "absolute_claim" in flags

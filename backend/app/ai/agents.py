@@ -6,6 +6,7 @@ Every finished deliverable is saved as an artifact version; chat replies are nev
 
 import base64
 import json
+import re
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -19,7 +20,7 @@ from pydantic import (
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.knowledge import build_context, extract_prices, sql_facts
+from app.ai.knowledge import build_context, documents, extract_prices, sql_facts
 from app.ai.llm import gemini_json
 from app.core import storage
 from app.models import Brand, Project, ProjectInput, Service, StorageObject
@@ -396,7 +397,23 @@ chỉ số có trong tài liệu (ví dụ "505nm", "10 phút"), để trống n
 tiếng Anh. caption/hook/cta/on_screen_text/voiceover: tiếng Việt."""
 
 
+# Promises Meta rejects in ads and the brand rules forbid: "100%", "24/7", "tuyệt đối", "số 1", "cam kết".
+ABSOLUTE = re.compile(r"100\s*%|24\s*/\s*7|tuyệt\s+đối|số\s*1\b|cam\s+kết|đảm\s+bảo", re.IGNORECASE)
+
+
+def _drop_invented_stats(db: Session, project: Project, variant: dict) -> None:
+    """A stat card keeps only numbers the shop's own data contains; the model invents "100%"."""
+    known = " ".join([*documents(db, project.workspace_id).values(), project.brief or ""])
+    for shot in variant["shots"]:
+        stat = shot.get("stat") or ""
+        nums = re.findall(r"\d[\d.,]*", stat)
+        if stat and (ABSOLUTE.search(stat) or not nums or any(n not in known for n in nums)):
+            shot["stat"] = ""
+
+
 def _script_flags(db: Session, project: Project, variant: dict) -> list[str]:
+    """Clean invented stat cards in place, then flag what still needs a human look."""
+    _drop_invented_stats(db, project, variant)
     _, allowed = sql_facts(db, project.workspace_id)
     text = " ".join(
         [
@@ -410,7 +427,10 @@ def _script_flags(db: Session, project: Project, variant: dict) -> list[str]:
         + [s.get("voiceover", "") for s in variant["shots"]]
         + [s.get("stat", "") for s in variant["shots"]]
     )
-    return ["unverified_price"] if extract_prices(text) - allowed else []
+    flags = ["unverified_price"] if extract_prices(text) - allowed else []
+    if ABSOLUTE.search(text):
+        flags.append("absolute_claim")
+    return flags
 
 
 def generate_scripts(
