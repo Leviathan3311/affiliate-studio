@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, CalendarClock, CalendarDays, Check, ChevronsUpDown, CreditCard, FolderKanban, Inbox, LayoutGrid, LogOut, Menu, Plus, Settings, Shield, Users, X } from "lucide-react";
+import { Bell, CalendarClock, CalendarDays, Check, ChevronsUpDown, CircleUser, CreditCard, FolderKanban, Inbox, LayoutGrid, LogOut, Menu, Plus, Settings, Shield, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -121,12 +121,13 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="mt-auto flex flex-col gap-0.5">
         {me.is_platform_admin && <NavLink href="/app/admin" label="Quản trị" icon={Shield} onNavigate={onNavigate} />}
         {can("admin") && <NavLink href="/app/billing" label="Gói & thanh toán" icon={CreditCard} onNavigate={onNavigate} />}
+        <NavLink href="/app/account" label="Tài khoản của tôi" icon={CircleUser} onNavigate={onNavigate} />
         <NavLink href="/app/settings" label="Cài đặt" icon={Settings} onNavigate={onNavigate} />
         <div className="mt-3 flex items-center gap-2.5 px-1.5">
           <Initials name={me.full_name || me.email} size={28} />
           <div className="min-w-0 flex-1 leading-tight">
             <p className="truncate text-sm">{me.full_name || me.email}</p>
-            <p className="text-xs text-muted">{ROLE[workspace.role]}</p>
+            <p className="text-xs text-muted">{me.is_platform_admin ? "Quản trị GrowthPilot" : ROLE[workspace.role]}</p>
           </div>
           <button
             onClick={() => {

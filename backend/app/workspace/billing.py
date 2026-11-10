@@ -291,3 +291,72 @@ def assign_transaction(tx_id: uuid.UUID, body: AssignIn, admin: PlatformAdmin, d
 def ignore_transaction(tx_id: uuid.UUID, _: PlatformAdmin, db: DB):
     _unmatched(db, tx_id).status = "ignored"
     db.commit()
+
+
+class AdminShop(BaseModel):
+    name: str
+    role: str
+
+
+class AdminUser(BaseModel):
+    id: uuid.UUID
+    email: str
+    full_name: str
+    created_at: datetime
+    is_platform_admin: bool
+    mfa_enabled: bool
+    disabled: bool
+    shops: list[AdminShop]
+
+
+def _admin_user(db, u: User) -> AdminUser:
+    shops = db.execute(
+        select(Workspace.name, WorkspaceMember.role)
+        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
+        .where(WorkspaceMember.user_id == u.id)
+        .order_by(Workspace.created_at)
+    ).all()
+    return AdminUser(
+        id=u.id,
+        email=u.email,
+        full_name=u.full_name,
+        created_at=_aware(u.created_at),
+        is_platform_admin=is_platform_admin(u),
+        mfa_enabled=bool(u.totp_secret),
+        disabled=bool(u.disabled_at),
+        shops=[AdminShop(name=n, role=r) for n, r in shops],
+    )
+
+
+@router.get("/admin/users", response_model=list[AdminUser])
+def admin_users(_: PlatformAdmin, db: DB, q: str = ""):
+    stmt = select(User).order_by(User.created_at.desc()).limit(500)
+    if q.strip():
+        like = f"%{q.strip().lower()}%"
+        stmt = stmt.where(func.lower(User.email).like(like) | func.lower(User.full_name).like(like))
+    return [_admin_user(db, u) for u in db.scalars(stmt)]
+
+
+def _target(db, admin: User, user_id: uuid.UUID) -> User:
+    u = db.get(User, user_id)
+    if u is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy tài khoản")
+    if u.id == admin.id or is_platform_admin(u):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Không khoá được tài khoản quản trị")
+    return u
+
+
+@router.post("/admin/users/{user_id}/disable", response_model=AdminUser)
+def disable_user(user_id: uuid.UUID, admin: PlatformAdmin, db: DB):
+    u = _target(db, admin, user_id)
+    u.disabled_at = utcnow()
+    db.commit()
+    return _admin_user(db, u)
+
+
+@router.post("/admin/users/{user_id}/enable", response_model=AdminUser)
+def enable_user(user_id: uuid.UUID, admin: PlatformAdmin, db: DB):
+    u = _target(db, admin, user_id)
+    u.disabled_at = None
+    db.commit()
+    return _admin_user(db, u)

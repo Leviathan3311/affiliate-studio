@@ -4,8 +4,8 @@ import { useState } from "react";
 import { Button, Dialog, Empty, ErrorNote, Field, PageTitle, Panel, Pill, Skeleton } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, ApiError, useApi } from "@/lib/api";
-import { vnd } from "@/lib/format";
-import type { AdminWorkspace, BankTx, Billing } from "@/lib/types";
+import { ROLE, vnd } from "@/lib/format";
+import type { AdminUser, AdminWorkspace, BankTx, Billing } from "@/lib/types";
 
 const date = (iso: string) => new Date(iso).toLocaleDateString("vi-VN");
 
@@ -15,12 +15,27 @@ export default function AdminPage() {
   const list = useApi<AdminWorkspace[]>(me.is_platform_admin ? `/admin/workspaces?q=${encodeURIComponent(q)}` : null);
   const price = useApi<Billing>("/billing").data?.price_vnd ?? 0;
   const [paying, setPaying] = useState<AdminWorkspace | null>(null);
+  const [tab, setTab] = useState<"shops" | "users">("shops");
 
   if (!me.is_platform_admin) return <Empty title="Trang này chỉ dành cho quản trị GrowthPilot" />;
   if (!me.mfa_enabled) return <MfaSetup />;
   return (
     <>
-      <PageTitle title="Quản trị" sub="Tất cả cửa hàng dùng GrowthPilot. Khi tiền chuyển khoản về, tìm theo nội dung (GP …) rồi gia hạn." />
+      <PageTitle title="Quản trị" sub="Tất cả cửa hàng và tài khoản dùng GrowthPilot. Khi tiền chuyển khoản về, tìm theo nội dung (GP …) rồi gia hạn." />
+      <div role="tablist" aria-label="Mục quản trị" className="mb-6 flex gap-5 border-b border-border">
+        {(["shops", "users"] as const).map((t) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={`-mb-px cursor-pointer border-b-2 pb-2 text-sm ${tab === t ? "border-accent font-semibold" : "border-transparent text-muted hover:text-ink"}`}
+          >
+            {t === "shops" ? "Cửa hàng" : "Tài khoản"}
+          </button>
+        ))}
+      </div>
+      {tab === "users" ? <Accounts /> : <>
       <Panel>
         <div className="mb-4 max-w-sm">
           <Field label="Tìm" name="q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Mã GP, tên cửa hàng hoặc email" />
@@ -67,6 +82,7 @@ export default function AdminPage() {
         )}
       </Panel>
       <Unmatched shops={list.data ?? []} price={price} onDone={list.reload} />
+      </>}
       {paying && <PayDialog ws={paying} price={price} onClose={() => setPaying(null)} onDone={list.reload} />}
     </>
   );
@@ -221,5 +237,76 @@ function MfaSetup() {
         )}
       </Panel>
     </>
+  );
+}
+
+/** Every account that signed up: who it is, which shops it is in, and a lock for abuse. */
+function Accounts() {
+  const [q, setQ] = useState("");
+  const users = useApi<AdminUser[]>(`/admin/users?q=${encodeURIComponent(q)}`);
+  const [error, setError] = useState<ApiError | null>(null);
+  async function toggle(u: AdminUser) {
+    setError(null);
+    try {
+      await api(`/admin/users/${u.id}/${u.disabled ? "enable" : "disable"}`, { method: "POST" });
+      users.reload();
+    } catch (e) {
+      setError(e as ApiError);
+    }
+  }
+  return (
+    <Panel>
+      <div className="mb-4 max-w-sm">
+        <Field label="Tìm" name="uq" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Email hoặc họ tên" />
+      </div>
+      {(error || users.error) && <ErrorNote error={(error || users.error)!} />}
+      {!users.data ? (
+        <Skeleton rows={5} />
+      ) : !users.data.length ? (
+        <Empty title="Không có tài khoản nào khớp" />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="text-xs text-muted">
+              <tr>
+                <th className="py-2 pr-3 font-medium">Tài khoản</th>
+                <th className="py-2 pr-3 font-medium">Cửa hàng</th>
+                <th className="py-2 pr-3 font-medium">Đăng ký</th>
+                <th className="py-2 pr-3 font-medium">Bảo mật</th>
+                <th className="py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {users.data.map((u) => (
+                <tr key={u.id} className="border-t border-rule">
+                  <td className="py-2.5 pr-3">
+                    <p className="font-medium">{u.full_name || u.email}</p>
+                    <p className="text-xs text-muted">{u.email}</p>
+                  </td>
+                  <td className="py-2.5 pr-3">
+                    {u.shops.length ? u.shops.map((s) => `${s.name} (${ROLE[s.role]})`).join(", ") : <span className="text-muted">Chưa tạo cửa hàng</span>}
+                  </td>
+                  <td className="py-2.5 pr-3">{date(u.created_at)}</td>
+                  <td className="py-2.5 pr-3">
+                    <div className="flex flex-wrap gap-1">
+                      {u.is_platform_admin && <Pill tone="accent">Quản trị</Pill>}
+                      {u.mfa_enabled && <Pill tone="positive">2 lớp</Pill>}
+                      {u.disabled && <Pill tone="negative">Đã khoá</Pill>}
+                    </div>
+                  </td>
+                  <td className="py-2.5 text-right">
+                    {!u.is_platform_admin && (
+                      <Button variant={u.disabled ? "secondary" : "danger"} onClick={() => toggle(u)}>
+                        {u.disabled ? "Mở khoá" : "Khoá"}
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
   );
 }

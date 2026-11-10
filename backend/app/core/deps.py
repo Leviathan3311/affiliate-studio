@@ -37,6 +37,8 @@ def current_user(
     user = db.get(User, user_id)
     if user is None or claims.get("pv") != password_fingerprint(user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")  # e.g. password changed
+    if user.disabled_at:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tài khoản đã bị khoá, liên hệ GrowthPilot")
     return user
 
 

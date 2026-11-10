@@ -105,6 +105,8 @@ def login(body: Login, db: DB, request: Request, response: Response):
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Email hoặc mật khẩu không đúng")
+    if user.disabled_at:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tài khoản đã bị khoá, liên hệ GrowthPilot")
     if user.totp_secret:  # second step: the 6-digit code, within 5 minutes
         mfa = create_token(str(user.id), minutes=5, purpose="mfa", fp=_fingerprint(user))
         return Token(access_token="", mfa_required=True, mfa_token=mfa)
@@ -237,3 +239,33 @@ def mfa_enable(body: MfaEnable, user: CurrentUser, db: DB):
         )
     user.totp_secret = encrypt_secret(body.secret)
     db.commit()
+
+
+# --- the signed-in user's own account ---
+
+
+class ProfilePatch(BaseModel):
+    full_name: str = Field(max_length=200)
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+@router.patch("/me", status_code=204)
+def update_me(body: ProfilePatch, user: CurrentUser, db: DB):
+    user.full_name = body.full_name.strip()
+    db.commit()
+
+
+@router.post("/change-password", response_model=Token)
+def change_password(
+    body: PasswordChange, user: CurrentUser, db: DB, request: Request, response: Response
+):
+    limit(f"pw-change:{user.id}", 10, 900)
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Mật khẩu hiện tại không đúng")
+    user.password_hash = hash_password(body.new_password)  # every other session ends here
+    db.commit()
+    return _signed_in(user, response, request)

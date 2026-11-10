@@ -18,6 +18,17 @@ export interface Billing {
   transfer: { bank_bin: string; account: string; account_name: string; content: string; qr_url: string | null };
 }
 
+export interface AdminUser {
+  id: string;
+  email: string;
+  full_name: string;
+  created_at: string;
+  is_platform_admin: boolean;
+  mfa_enabled: boolean;
+  disabled: boolean;
+  shops: { name: string; role: Role }[];
+}
+
 export interface BankTx {
   id: string;
   created_at: string;

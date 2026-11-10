@@ -45,3 +45,26 @@ def test_two_factor_login_needs_the_code(client):
         json={"mfa_token": r["mfa_token"], "code": pyotp.TOTP(secret).now()},
     )
     assert ok.status_code == 200 and client.get("/api/v1/auth/me").status_code == 200
+
+
+def test_change_password_keeps_this_session_and_ends_others(client):
+    old = signup(client, "an@spa.vn")
+    r = client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": "wrong", "new_password": "newpass99"},
+        headers=old,
+    )
+    assert r.status_code == 422
+    r = client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": "secret123", "new_password": "newpass99"},
+        headers=old,
+    )
+    assert r.status_code == 200
+    assert client.get("/api/v1/auth/me", headers=old).status_code == 401  # the old token
+    new = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    assert (
+        client.patch("/api/v1/auth/me", json={"full_name": "Lan Anh"}, headers=new).status_code
+        == 204
+    )
+    assert client.get("/api/v1/auth/me", headers=new).json()["full_name"] == "Lan Anh"

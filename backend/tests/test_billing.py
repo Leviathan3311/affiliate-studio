@@ -195,3 +195,24 @@ def test_plan_reminders_email_the_owner_once(client, db, monkeypatch):
     db.commit()
     assert remind_plans(db) == 1
     assert "đã hết hạn" in sent[-1][1]
+
+
+def test_admin_lists_and_locks_accounts(client, admin):
+    shop = signup(client, "chu@shop.vn")
+    rows = client.get("/api/v1/admin/users", params={"q": "chu@"}, headers=admin).json()
+    assert [(r["email"], r["shops"][0]["name"], r["disabled"]) for r in rows] == [
+        ("chu@shop.vn", "Lotus Spa", False)
+    ]
+    r = client.post(f"/api/v1/admin/users/{rows[0]['id']}/disable", headers=admin)
+    assert r.status_code == 200 and r.json()["disabled"]
+    assert client.get("/api/v1/auth/me", headers=shop).status_code == 403
+    login = client.post(
+        "/api/v1/auth/login", json={"email": "chu@shop.vn", "password": "secret123"}
+    )
+    assert login.status_code == 403
+    me = next(
+        u for u in client.get("/api/v1/admin/users", headers=admin).json() if u["is_platform_admin"]
+    )
+    assert client.post(f"/api/v1/admin/users/{me['id']}/disable", headers=admin).status_code == 409
+    client.post(f"/api/v1/admin/users/{rows[0]['id']}/enable", headers=admin)
+    assert client.get("/api/v1/auth/me", headers=shop).status_code == 200

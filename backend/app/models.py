@@ -45,6 +45,7 @@ class User(IdMixin, Base):
     full_name: Mapped[str] = mapped_column(String(200), default="")
     # Encrypted TOTP secret; set = this account signs in with a 6-digit code too (required for admins).
     totp_secret: Mapped[str] = mapped_column(Text, default="")
+    disabled_at: Mapped[datetime | None]  # locked by a platform admin: no sign-in, no API
 
 
 class Workspace(IdMixin, Base):
