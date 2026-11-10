@@ -27,9 +27,11 @@ function Invite() {
   const here = `/invite?token=${encodeURIComponent(token)}`;
 
   useEffect(() => {
-    setSignedIn(!!session.token()); // after hydration: the static page is rendered signed out
     api<{ shop: string; email: string; role: Role }>(`/auth/invites/${encodeURIComponent(token)}`)
-      .then(setInfo)
+      .then((i) => {
+        setInfo(i);
+        setSignedIn(!!session.token()); // read after hydration: the static page is rendered signed out
+      })
       .catch((e) => setError(e as ApiError));
   }, [token]);
 
