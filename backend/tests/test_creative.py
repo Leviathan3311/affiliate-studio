@@ -733,3 +733,13 @@ def test_invented_stat_cards_are_dropped_and_absolute_claims_flagged(client, db)
     flags = _script_flags(db, p, variant)
     assert [s["stat"] for s in variant["shots"]] == ["", "14 ngày", ""]
     assert "absolute_claim" in flags
+
+
+def test_ad_talent_defaults_to_vietnamese():
+    from app.creative.media import _continuity
+
+    assert "Vietnamese a young shop owner in a white polo" in _continuity(
+        {"continuity": {"talent": "A young shop owner in a white polo"}}
+    )
+    kept = _continuity({"continuity": {"talent": "a Korean tourist"}})
+    assert "Vietnamese" not in kept and "Korean tourist" in kept

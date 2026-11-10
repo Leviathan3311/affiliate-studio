@@ -7,6 +7,7 @@ presigned PUT URLs handed out here, so they never hold storage credentials.
 """
 
 import logging
+import re
 import uuid
 from datetime import timedelta
 
@@ -88,6 +89,12 @@ def _references(db: Session, project: Project, roles: tuple[str, ...]) -> list[d
     ]
 
 
+ORIGIN = re.compile(
+    r"vietnam|việt|asian|chinese|korean|japanese|thai|western|european|caucasian|african|indian|latin",
+    re.IGNORECASE,
+)
+
+
 def _continuity(script: dict, with_product: bool = True) -> str:
     """The script's fixed product, person and room, appended to every shot so each separately
     generated frame shows the same ones (scripts written before this have none)."""
@@ -99,6 +106,11 @@ def _continuity(script: dict, with_product: bool = True) -> str:
         ("talent", "Person"),
         ("setting", "Setting"),
     )
+    c = dict(c)
+    talent = c.get("talent", "").strip()
+    # Viewers are Vietnamese: a person described without one came out Western ("a shop owner").
+    if talent and not ORIGIN.search(talent):
+        c["talent"] = f"Vietnamese {talent[:1].lower()}{talent[1:]}"
     parts = [
         f"{label}: {c[k].strip()}"
         for k, label in labels

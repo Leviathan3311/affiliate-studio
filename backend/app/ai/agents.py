@@ -359,7 +359,8 @@ nạ phát sáng trên mặt → tháo ra, da mặt rạng rỡ), không nhảy 
 theo tài liệu và cách dùng trên cơ thể, nói rõ CÓ hay KHÔNG có dây đeo, dây cáp, bộ điều khiển (ví \
 dụ "a flexible white silicone full-face LED mask with eye openings, no straps and no cables, rests on \
 the face, glowing teal-green light from the inside"); model hay tự vẽ thêm những thứ này; talent = khách trên hình \
-(tuổi, ngoại hình, tóc, trang phục); setting = phòng, đạo cụ, ánh sáng, tông màu (không ghi tên thương hiệu hay \
+(tuổi, ngoại hình, tóc, trang phục), mặc định là người Việt Nam (ghi rõ "Vietnamese") trừ khi brief nói \
+khác, vì khách xem quảng cáo là người Việt; setting = phòng, đạo cụ, ánh sáng, tông màu (không ghi tên thương hiệu hay \
 chữ nào: model sẽ vẽ chữ đó lên hình và viết sai).
 - visual_prompt (tiếng Anh) của MỖI shot: gọi sản phẩm và người bằng đúng cụm từ trong continuity, \
 nói rõ sản phẩm đang ở đâu (trên mặt, trên khay, trong tay), cỡ cảnh (close-up, medium, wide) và việc \
