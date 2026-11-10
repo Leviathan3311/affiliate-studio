@@ -31,7 +31,14 @@ from app.models import (
 )
 
 MAX_SHOTS = VIDEO_SHOTS
-NO_TEXT = " No text, letters, logos or watermarks anywhere in the frame."
+NO_TEXT = (
+    " No text, letters, logos or watermarks anywhere in the frame."
+    # a "white polo shirt" came out with a famous brand's polo-player badge
+    " Clothes are plain, with no logo, emblem or embroidered badge."
+    # an app screen came out as gibberish ("Br coner rubbing"); readable UI is drawn afterwards
+    " Any phone, tablet or laptop screen shows only a soft blurred glow of colour, never a "
+    "readable app, words, numbers or buttons."
+)
 # H3 wrote a garbled end card ("wi chrến hện") over a final "reveal" shot with a "brand jingle"
 NO_TEXT_VIDEO = NO_TEXT + " No captions, subtitles, title cards or end card ever appear."
 MAX_SHORTS = 5

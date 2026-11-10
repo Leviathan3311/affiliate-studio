@@ -429,8 +429,12 @@ chậm), cut. Dùng ít nhất 2 kiểu khác nhau; shot cuối để cut.
 chỉ số có trong tài liệu (ví dụ "505nm", "10 phút"), để trống nếu không có.
   - chat: khi câu chuyện cần cho thấy tin nhắn (khách hỏi, cửa hàng trả lời), ghi tối đa 3 tin \
 [{{"who":"khach"|"shop","text":"..."}}] bằng tiếng Việt, ngắn; hệ thống tự vẽ khung chat rõ nét lên hình. \
-Shot có chat thì visual_prompt KHÔNG quay cận màn hình điện thoại (AI vẽ chữ trên màn hình bị nhoè): \
-quay người cầm điện thoại, màn hình quay đi hoặc mờ nền; shot có chat thì để trống stat.
+Shot có chat thì để trống stat.
+  - Màn hình: AI vẽ chữ, số, nút trên màn hình điện thoại/laptop bị nhoè thành chữ vô nghĩa. Không shot \
+nào quay cận hay macro màn hình, visual_prompt và continuity không tả nội dung màn hình (không chữ, giá, \
+nút, biểu đồ, dashboard): quay người cầm máy và nét mặt, màn hình quay đi hoặc chỉ là ánh sáng màu mờ. \
+Giá và số liệu để ở on_screen_text, stat; tin nhắn để ở chat.
+  - Trang phục diễn viên trơn, không logo, chữ hay hình thêu.
 - motion: chuyển động máy quay/chủ thể bằng tiếng Anh, nối được với shot sau. music_mood: tag nhạc nền \
 tiếng Anh. caption/hook/cta/on_screen_text/voiceover: tiếng Việt."""
 
