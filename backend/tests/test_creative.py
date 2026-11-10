@@ -738,7 +738,7 @@ def test_invented_stat_cards_are_dropped_and_absolute_claims_flagged(client, db)
 def test_ad_talent_defaults_to_vietnamese():
     from app.creative.media import _continuity
 
-    assert "Vietnamese a young shop owner in a white polo" in _continuity(
+    assert "Vietnamese young shop owner in a white polo" in _continuity(
         {"continuity": {"talent": "A young shop owner in a white polo"}}
     )
     kept = _continuity({"continuity": {"talent": "a Korean tourist"}})

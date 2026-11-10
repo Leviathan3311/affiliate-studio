@@ -110,7 +110,8 @@ def _continuity(script: dict, with_product: bool = True) -> str:
     talent = c.get("talent", "").strip()
     # Viewers are Vietnamese: a person described without one came out Western ("a shop owner").
     if talent and not ORIGIN.search(talent):
-        c["talent"] = f"Vietnamese {talent[:1].lower()}{talent[1:]}"
+        rest = re.sub(r"^(a|an|the)\s+", "", talent, flags=re.IGNORECASE)
+        c["talent"] = f"Vietnamese {rest[:1].lower()}{rest[1:]}"
     parts = [
         f"{label}: {c[k].strip()}"
         for k, label in labels
