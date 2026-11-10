@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     bank_account: str = ""
     bank_account_name: str = ""
     platform_admin_emails: list[str] = []
+    # SePay watches the bank account and posts each incoming transfer (Authorization: Apikey <key>).
+    sepay_api_key: str = ""
 
     # Outgoing email (password reset). Gmail: smtp.gmail.com + an App Password.
     smtp_host: str = ""

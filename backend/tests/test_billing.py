@@ -81,3 +81,52 @@ def test_industry_is_saved_and_used_by_the_ai(client, db):
     assert db.query(Brand).filter_by(workspace_id=ws_id).one().industry == "Tiệm nail"
     lines, _ = sql_facts(db, ws_id)
     assert lines[0].startswith("Tiệm nail: Mây Nail.")
+
+
+def _sepay(client, content, amount, tx_id=1, key="k"):
+    return client.post(
+        "/api/v1/billing/webhooks/sepay",
+        json={
+            "id": tx_id,
+            "transferType": "in",
+            "transferAmount": amount,
+            "content": content,
+            "referenceCode": "FT1",
+        },
+        headers={"Authorization": f"Apikey {key}"},
+    )
+
+
+def test_sepay_transfer_activates_the_right_workspace_once(client, db, monkeypatch):
+    import uuid
+
+    monkeypatch.setattr(get_settings(), "sepay_api_key", "k")
+    h = signup(client)
+    ws_id = uuid.UUID(h["X-Workspace-Id"])
+    _expire(db, ws_id)
+    code = ws_id.hex[:8].upper()
+
+    assert _sepay(client, f"MBVCB.123 GP{code} chuyen tien", 998000, key="wrong").status_code == 401
+    assert _sepay(client, f"MBVCB.123 GP{code} chuyen tien", 998000).json() == {"success": True}
+    assert _sepay(client, f"MBVCB.123 GP{code} chuyen tien", 998000).status_code == 200  # retry
+    b = client.get("/api/v1/billing", headers=h).json()
+    assert b["status"] == "active"
+    db.expire_all()
+    assert (db.get(Workspace, ws_id).paid_until - utcnow()).days in (
+        59,
+        60,
+    )  # 2 months, counted once
+    notes = client.get("/api/v1/notifications", headers=h).json()
+    assert any("998.000đ" in n["title"] for n in notes)
+
+
+def test_sepay_ignores_unknown_code_and_small_amounts(client, db, monkeypatch):
+    import uuid
+
+    monkeypatch.setattr(get_settings(), "sepay_api_key", "k")
+    h = signup(client)
+    ws_id = uuid.UUID(h["X-Workspace-Id"])
+    _expire(db, ws_id)
+    _sepay(client, "GP FFFFFFFF", 499000, tx_id=2)
+    _sepay(client, f"GP {ws_id.hex[:8]}", 100000, tx_id=3)
+    assert client.get("/api/v1/billing", headers=h).json()["status"] == "expired"

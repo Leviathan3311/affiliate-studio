@@ -26,6 +26,16 @@ Khi tiền về:
 2. Tìm theo nội dung chuyển khoản.
 3. Bấm **Gia hạn**, nhập số tháng và số tiền đã nhận.
 
+**Kích hoạt tự động bằng SePay (nên bật):**
+1. Đăng ký sepay.vn và liên kết tài khoản ngân hàng nhận tiền.
+2. Vào **Webhooks → Thêm webhook**, điền:
+   - URL: `https://api.growthpilot-spa.online/api/v1/billing/webhooks/sepay`
+   - Sự kiện: tiền vào
+   - Kiểu chứng thực: **API Key**, tự đặt một chuỗi dài ngẫu nhiên.
+3. Chép chuỗi đó vào `SEPAY_API_KEY` trong `backend/.env` rồi khởi động lại API.
+
+Từ đó, mỗi khoản chuyển có nội dung `GP XXXXXXXX` sẽ tự gia hạn đúng cửa hàng trong vài giây, theo công thức số tháng = số tiền ÷ giá gói. Cửa hàng cũng nhận một thông báo trong app. Các khoản chuyển thiếu tiền hoặc sai mã không được áp dụng, chỉ ghi vào log để bạn xử lý tay.
+
 Cửa hàng hết hạn vẫn đăng nhập và xem được trang thanh toán. Tin nhắn khách vẫn được lưu, chỉ AI tạm ngừng trả lời.
 
 ## 2. Meta Pixel

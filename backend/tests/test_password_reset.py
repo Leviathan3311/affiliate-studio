@@ -73,3 +73,23 @@ def test_oauth_state_is_not_a_session(client):
         client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {state}"}).status_code
         == 401
     )
+
+
+def test_password_change_ends_old_sessions(client, monkeypatch):
+    h = signup(client, "an@spa.vn")
+    sent = _request_link(client, monkeypatch, "an@spa.vn")
+    client.post(
+        "/api/v1/auth/reset-password", json={"token": _token(sent[0][1]), "password": "newpass99"}
+    )
+    assert client.get("/api/v1/auth/me", headers=h).status_code == 401
+
+
+def test_login_is_rate_limited(client):
+    signup(client, "binh@spa.vn")
+    codes = [
+        client.post(
+            "/api/v1/auth/login", json={"email": "binh@spa.vn", "password": "wrong-pass"}
+        ).status_code
+        for _ in range(11)
+    ]
+    assert codes[:10] == [401] * 10 and codes[10] == 429

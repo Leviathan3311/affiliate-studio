@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.plan import is_active
-from app.core.security import decode_token
+from app.core.security import decode_token, password_fingerprint
 from app.models import AuditLog, User, Workspace, WorkspaceMember
 
 DB = Annotated[Session, Depends(get_db)]
@@ -30,8 +30,8 @@ def current_user(
     except (jwt.PyJWTError, KeyError, ValueError):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token") from None
     user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+    if user is None or claims.get("pv") != password_fingerprint(user.password_hash):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")  # e.g. password changed
     return user
 
 

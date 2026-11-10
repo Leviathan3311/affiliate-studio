@@ -44,8 +44,10 @@ def db(engine):
 
 @pytest.fixture
 def client(engine, monkeypatch, tmp_path):
+    from app.core import ratelimit
     from app.core.config import get_settings
 
+    ratelimit.reset()
     Session = sessionmaker(bind=engine, expire_on_commit=False)
     monkeypatch.setattr(app_db, "SessionLocal", Session)  # background tasks + worker
     monkeypatch.setattr(get_settings(), "local_media_dir", str(tmp_path / "media"))

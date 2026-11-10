@@ -21,6 +21,15 @@ def verify_password(password: str, hashed: str) -> bool:
     return _hasher.verify(password, hashed)
 
 
+def password_fingerprint(password_hash: str) -> str:
+    """Changes whenever the password does: sessions and reset links carry it and die with it."""
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
+
+
+def session_token(user) -> str:
+    return create_token(str(user.id), pv=password_fingerprint(user.password_hash))
+
+
 def create_token(subject: str, minutes: int | None = None, **claims) -> str:
     s = get_settings()
     exp = utcnow() + timedelta(minutes=minutes or s.access_token_minutes)

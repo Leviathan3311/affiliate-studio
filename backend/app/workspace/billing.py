@@ -3,12 +3,15 @@
 The platform admin confirms each transfer by hand; that extends the workspace's paid_until.
 """
 
+import hmac
+import logging
+import re
 import uuid
 from datetime import datetime, timedelta
 from typing import Annotated
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
@@ -16,9 +19,10 @@ from app.core.config import get_settings
 from app.core.db import utcnow
 from app.core.deps import DB, AnyMember, CurrentUser
 from app.core.plan import _aware, access_until, is_active
-from app.models import Payment, User, Workspace, WorkspaceMember
+from app.models import Notification, Payment, User, Workspace, WorkspaceMember
 
 router = APIRouter(tags=["billing"])
+log = logging.getLogger(__name__)
 MONTH = timedelta(days=30)
 
 
@@ -143,8 +147,58 @@ def record_payment(ws_id: uuid.UUID, body: PaymentIn, admin: PlatformAdmin, db: 
     ws = db.get(Workspace, ws_id)
     if ws is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy cửa hàng")
-    start = max(utcnow(), access_until(ws))  # paying early adds to the time left
-    ws.paid_until = start + MONTH * body.months
-    db.add(Payment(workspace_id=ws.id, created_by=admin.id, **body.model_dump()))
+    extend(db, ws, body.months, body.amount_vnd, body.note, created_by=admin.id)
     db.commit()
     return next(w for w in admin_workspaces(admin, db) if w.id == ws.id)
+
+
+def extend(db, ws: Workspace, months: int, amount: int, note: str, created_by=None) -> None:
+    start = max(utcnow(), access_until(ws))  # paying early adds to the time left
+    ws.paid_until = start + MONTH * months
+    db.add(
+        Payment(
+            workspace_id=ws.id, months=months, amount_vnd=amount, note=note, created_by=created_by
+        )
+    )
+    until = ws.paid_until.astimezone().strftime("%d/%m/%Y")
+    db.add(
+        Notification(
+            workspace_id=ws.id,
+            type="payment",
+            title=f"Đã nhận {amount:,}đ, gói dùng được đến hết {until}".replace(",", "."),
+            body=note,
+            dedupe_key=f"payment:{note}"[:255],
+        )
+    )
+
+
+CODE = re.compile(r"GP\s*([0-9A-F]{8})", re.IGNORECASE)
+
+
+@router.post("/billing/webhooks/sepay")
+async def sepay_webhook(request: Request, db: DB, authorization: str = Header(default="")):
+    """A bank transfer seen by SePay: 'GP 1A2B3C4D' in its content extends that workspace at once."""
+    key = get_settings().sepay_api_key
+    if not key or not hmac.compare_digest(authorization, f"Apikey {key}"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid API key")
+    tx = await request.json()
+    ref = f"SePay #{tx.get('id')}"
+    amount = int(tx.get("transferAmount") or 0)
+    match = CODE.search(str(tx.get("content") or ""))
+    if tx.get("transferType") != "in" or not match or amount <= 0:
+        return {"success": True}  # not a GrowthPilot payment
+    if db.scalar(select(Payment.id).where(Payment.note.startswith(ref + " "))):
+        return {"success": True}  # SePay retried a transfer we already counted
+    code = match.group(1).lower()
+    hits = [ws for ws in db.scalars(select(Workspace)) if ws.id.hex.startswith(code)]
+    months = amount // get_settings().plan_price_vnd
+    if len(hits) != 1 or months < 1:
+        log.warning(
+            "sepay %s: %s VND for code %s not applied (%s workspaces)", ref, amount, code, len(hits)
+        )
+        return {"success": True}  # logged: the admin decides by hand in /app/admin
+    extend(
+        db, hits[0], months, amount, f"{ref} · {tx.get('referenceCode') or ''} · tự động".strip()
+    )
+    db.commit()
+    return {"success": True}
