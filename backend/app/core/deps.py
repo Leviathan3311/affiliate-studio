@@ -17,13 +17,18 @@ DB = Annotated[Session, Depends(get_db)]
 _bearer = HTTPBearer(auto_error=False)
 
 
+SESSION_COOKIE = "gp_session"
+
+
 def current_user(
-    db: DB, cred: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
+    request: Request, db: DB, cred: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 ) -> User:
-    if cred is None:
+    # The web app uses the httpOnly cookie; scripts and the media worker send a bearer token.
+    token = cred.credentials if cred else request.cookies.get(SESSION_COOKIE)
+    if not token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing token")
     try:
-        claims = decode_token(cred.credentials)
+        claims = decode_token(token)
         if "purpose" in claims:  # OAuth state and reset links are not sessions
             raise KeyError("purpose")
         user_id = uuid.UUID(claims["sub"])

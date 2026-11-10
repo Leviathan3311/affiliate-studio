@@ -1,17 +1,20 @@
 import uuid
 
 import jwt
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+import pyotp
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
 
 from app.core import mail
 from app.core.config import get_settings
-from app.core.deps import DB, CurrentUser
+from app.core.deps import DB, SESSION_COOKIE, CurrentUser
 from app.core.ratelimit import client_ip, limit
 from app.core.security import (
     create_token,
     decode_token,
+    decrypt_secret,
+    encrypt_secret,
     hash_password,
     password_fingerprint,
     session_token,
@@ -46,6 +49,25 @@ class ResetPassword(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    mfa_required: bool = False
+    mfa_token: str = ""
+
+
+def _signed_in(user: User, response: Response, request: Request) -> Token:
+    """Session in an httpOnly cookie for the web app (and in the body for scripts)."""
+    token = session_token(user)
+    s = get_settings()
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=s.access_token_minutes * 60,
+        httponly=True,
+        # https in production (Modal sits behind TLS); plain http only for localhost development
+        secure=s.env != "dev"
+        or request.headers.get("x-forwarded-proto", request.url.scheme) == "https",
+        samesite="lax",
+    )
+    return Token(access_token=token)
 
 
 class WorkspaceRef(BaseModel):
@@ -61,10 +83,11 @@ class Me(BaseModel):
     full_name: str
     workspaces: list[WorkspaceRef]
     is_platform_admin: bool = False
+    mfa_enabled: bool = False
 
 
 @router.post("/register", response_model=Token, status_code=201)
-def register(body: Register, db: DB, request: Request):
+def register(body: Register, db: DB, request: Request, response: Response):
     limit(f"register:{client_ip(request)}", 10, 3600)
     email = body.email.lower()
     if db.scalar(select(User.id).where(User.email == email)):
@@ -72,17 +95,20 @@ def register(body: Register, db: DB, request: Request):
     user = User(email=email, password_hash=hash_password(body.password), full_name=body.full_name)
     db.add(user)
     db.commit()
-    return Token(access_token=session_token(user))
+    return _signed_in(user, response, request)
 
 
 @router.post("/login", response_model=Token)
-def login(body: Login, db: DB, request: Request):
+def login(body: Login, db: DB, request: Request, response: Response):
     limit(f"login-ip:{client_ip(request)}", 30, 900)
     limit(f"login:{body.email.lower()}", 10, 900)
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Email hoặc mật khẩu không đúng")
-    return Token(access_token=session_token(user))
+    if user.totp_secret:  # second step: the 6-digit code, within 5 minutes
+        mfa = create_token(str(user.id), minutes=5, purpose="mfa", fp=_fingerprint(user))
+        return Token(access_token="", mfa_required=True, mfa_token=mfa)
+    return _signed_in(user, response, request)
 
 
 RESET_MINUTES = 30
@@ -114,7 +140,7 @@ def forgot_password(body: ForgotPassword, db: DB, bg: BackgroundTasks, request: 
 
 
 @router.post("/reset-password", response_model=Token)
-def reset_password(body: ResetPassword, db: DB, request: Request):
+def reset_password(body: ResetPassword, db: DB, request: Request, response: Response):
     limit(f"reset:{client_ip(request)}", 10, 3600)
     bad = HTTPException(
         status.HTTP_400_BAD_REQUEST, "Liên kết đã hết hạn hoặc đã dùng rồi, hãy gửi lại yêu cầu"
@@ -130,7 +156,7 @@ def reset_password(body: ResetPassword, db: DB, request: Request):
         raise bad
     user.password_hash = hash_password(body.password)
     db.commit()
-    return Token(access_token=session_token(user))
+    return _signed_in(user, response, request)
 
 
 @router.get("/me", response_model=Me)
@@ -147,4 +173,67 @@ def me(user: CurrentUser, db: DB):
         full_name=user.full_name,
         workspaces=[WorkspaceRef(id=r.id, name=r.name, role=r.role) for r in rows],
         is_platform_admin=is_platform_admin(user),
+        mfa_enabled=bool(user.totp_secret),
     )
+
+
+@router.post("/logout", status_code=204)
+def logout(response: Response):
+    response.delete_cookie(SESSION_COOKIE)
+
+
+# --- two-factor sign-in (TOTP, any authenticator app) ---
+
+
+class MfaVerify(BaseModel):
+    mfa_token: str = Field(max_length=2000)
+    code: str = Field(min_length=6, max_length=8)
+
+
+class MfaSetup(BaseModel):
+    secret: str
+    otpauth_url: str
+
+
+class MfaEnable(BaseModel):
+    secret: str = Field(min_length=16, max_length=64)
+    code: str = Field(min_length=6, max_length=8)
+
+
+def _code_ok(secret: str, code: str) -> bool:
+    return pyotp.TOTP(secret).verify(code.strip().replace(" ", ""), valid_window=1)
+
+
+@router.post("/2fa/verify", response_model=Token)
+def mfa_verify(body: MfaVerify, db: DB, request: Request, response: Response):
+    limit(f"mfa:{client_ip(request)}", 10, 900)
+    bad = HTTPException(status.HTTP_401_UNAUTHORIZED, "Mã xác thực không đúng hoặc đã hết hạn")
+    try:
+        claims = decode_token(body.mfa_token)
+        user = db.get(User, uuid.UUID(claims["sub"])) if claims.get("purpose") == "mfa" else None
+    except (jwt.PyJWTError, KeyError, ValueError):
+        raise bad from None
+    if user is None or claims.get("fp") != _fingerprint(user) or not user.totp_secret:
+        raise bad
+    if not _code_ok(decrypt_secret(user.totp_secret), body.code):
+        raise bad
+    return _signed_in(user, response, request)
+
+
+@router.get("/2fa/setup", response_model=MfaSetup)
+def mfa_setup(user: CurrentUser):
+    if user.totp_secret:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Tài khoản đã bật xác thực hai lớp")
+    secret = pyotp.random_base32()
+    url = pyotp.TOTP(secret).provisioning_uri(name=user.email, issuer_name="GrowthPilot")
+    return MfaSetup(secret=secret, otpauth_url=url)
+
+
+@router.post("/2fa/enable", status_code=204)
+def mfa_enable(body: MfaEnable, user: CurrentUser, db: DB):
+    if not _code_ok(body.secret, body.code):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Mã chưa đúng, thử mã mới trong app"
+        )
+    user.totp_secret = encrypt_secret(body.secret)
+    db.commit()

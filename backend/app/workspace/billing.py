@@ -81,6 +81,12 @@ def is_platform_admin(user: User) -> bool:
 def platform_admin(user: CurrentUser) -> User:
     if not is_platform_admin(user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Chỉ quản trị GrowthPilot")
+    if (
+        not user.totp_secret
+    ):  # this account can extend any shop's plan: a password alone is not enough
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Tài khoản quản trị cần bật xác thực hai lớp"
+        )
     return user
 
 

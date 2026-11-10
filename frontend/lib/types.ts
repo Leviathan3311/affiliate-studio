@@ -8,6 +8,7 @@ export interface Me {
   full_name: string;
   workspaces: { id: string; name: string; role: Role }[];
   is_platform_admin: boolean;
+  mfa_enabled: boolean;
 }
 
 export interface Billing {

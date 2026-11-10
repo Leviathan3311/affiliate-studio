@@ -130,6 +130,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </div>
           <button
             onClick={() => {
+              api("/auth/logout", { method: "POST" }).catch(() => undefined);
               session.clear();
               router.replace("/login");
             }}

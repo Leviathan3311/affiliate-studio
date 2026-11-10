@@ -23,7 +23,7 @@ export function useWorkspace() {
 type State = { me: Me; workspace: Workspace };
 
 async function loadState(): Promise<State | "login" | "onboarding"> {
-  if (!session.token()) return "login";
+  if (!session.signedIn()) return "login";
   const me = await api<Me>("/auth/me");
   const current = me.workspaces.find((w) => w.id === session.workspace()) ?? me.workspaces[0];
   if (!current) return "onboarding";

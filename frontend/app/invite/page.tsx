@@ -30,7 +30,7 @@ function Invite() {
     api<{ shop: string; email: string; role: Role }>(`/auth/invites/${encodeURIComponent(token)}`)
       .then((i) => {
         setInfo(i);
-        setSignedIn(!!session.token()); // read after hydration: the static page is rendered signed out
+        setSignedIn(session.signedIn()); // read after hydration: the static page is rendered signed out
       })
       .catch((e) => setError(e as ApiError));
   }, [token]);

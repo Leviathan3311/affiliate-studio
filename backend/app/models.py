@@ -43,6 +43,8 @@ class User(IdMixin, Base):
     email: Mapped[str] = mapped_column(String(320), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(200), default="")
+    # Encrypted TOTP secret; set = this account signs in with a 6-digit code too (required for admins).
+    totp_secret: Mapped[str] = mapped_column(Text, default="")
 
 
 class Workspace(IdMixin, Base):

@@ -20,7 +20,23 @@ def admin(client, monkeypatch):
     r = client.post(
         "/api/v1/auth/register", json={"email": "boss@growthpilot.vn", "password": "secret123"}
     )
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+    h = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    import pyotp
+
+    secret = client.get("/api/v1/auth/2fa/setup", headers=h).json()["secret"]
+    body = {"secret": secret, "code": pyotp.TOTP(secret).now()}
+    assert client.post("/api/v1/auth/2fa/enable", json=body, headers=h).status_code == 204
+    return h
+
+
+def test_platform_admin_needs_two_factor(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "platform_admin_emails", ["boss2@growthpilot.vn"])
+    r = client.post(
+        "/api/v1/auth/register", json={"email": "boss2@growthpilot.vn", "password": "secret123"}
+    )
+    h = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    r = client.get("/api/v1/admin/workspaces", headers=h)
+    assert r.status_code == 403 and "xác thực hai lớp" in r.json()["detail"]
 
 
 def test_new_workspace_gets_a_trial_and_transfer_details(client, monkeypatch):

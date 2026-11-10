@@ -3,19 +3,20 @@
 import { useCallback, useEffect, useState } from "react";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const TOKEN = "gp.token";
+const SIGNED = "gp.signed";
 const WORKSPACE = "gp.workspace";
 
-// shortcut: bearer token in localStorage; move to an httpOnly cookie behind a same-origin proxy
-// before handling real customer data at scale.
+// The session itself is an httpOnly cookie set by the API (page scripts cannot read it); this only
+// remembers that one exists, to pick the landing page or the app on load.
 export const session = {
-  token: () => (typeof window === "undefined" ? null : localStorage.getItem(TOKEN)),
+  signedIn: () => typeof window !== "undefined" && localStorage.getItem(SIGNED) === "1",
   workspace: () => (typeof window === "undefined" ? null : localStorage.getItem(WORKSPACE)),
-  setToken: (t: string) => localStorage.setItem(TOKEN, t),
+  markSignedIn: () => localStorage.setItem(SIGNED, "1"),
   setWorkspace: (id: string) => localStorage.setItem(WORKSPACE, id),
   clear: () => {
-    localStorage.removeItem(TOKEN);
+    localStorage.removeItem(SIGNED);
     localStorage.removeItem(WORKSPACE);
+    localStorage.removeItem("gp.token"); // bearer token kept by older versions
   },
 };
 
@@ -46,15 +47,14 @@ function plain(status: number, detail: string | undefined): string {
 
 export async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  const token = session.token();
   const ws = session.workspace();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
   if (ws) headers.set("X-Workspace-Id", ws);
   if (init.json !== undefined) headers.set("Content-Type", "application/json");
 
   let res: Response;
   try {
     res = await fetch(`${API_URL}/api/v1${path}`, {
+      credentials: "include",
       ...init,
       headers,
       body: init.json !== undefined ? JSON.stringify(init.json) : init.body,

@@ -8,7 +8,7 @@ import { session } from "@/lib/api";
 export default function Home() {
   const router = useRouter();
   useEffect(() => {
-    if (session.token()) router.replace("/app");
+    if (session.signedIn()) router.replace("/app");
   }, [router]);
   return <Landing />;
 }
