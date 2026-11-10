@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Button, Empty, ErrorNote, PageTitle, Pill, Skeleton } from "@/components/ui";
-import { api, useApi } from "@/lib/api";
+import { useMemo, useState } from "react";
+import { Button, Dialog, Empty, ErrorNote, Field, PageTitle, Pill, Skeleton } from "@/components/ui";
+import { api, ApiError, useApi } from "@/lib/api";
 import { PUBLISH_STATUS, time } from "@/lib/format";
-import type { PublishingJob } from "@/lib/types";
+import type { PublishingJob, SocialAccount } from "@/lib/types";
 
 const FILTERS = [
   { id: "", label: "Tất cả" },
@@ -24,10 +24,16 @@ export default function PublishingPage() {
     byDay.set(day, [...(byDay.get(day) ?? []), j]);
   }
   const failed = list.data?.filter((j) => j.status === "failed").length ?? 0;
+  const [photo, setPhoto] = useState(false);
 
   return (
     <>
-      <PageTitle title="Lịch đăng bài" sub={list.data ? `${list.data.length} bài${failed ? ` · ${failed} bài lỗi cần xử lý` : ""}` : undefined} />
+      <PageTitle
+        title="Lịch đăng bài"
+        sub={list.data ? `${list.data.length} bài${failed ? ` · ${failed} bài lỗi cần xử lý` : ""}` : undefined}
+        actions={<Button variant="primary" onClick={() => setPhoto(true)}>Đăng ảnh</Button>}
+      />
+      {photo && <PhotoPost onClose={() => setPhoto(false)} onDone={list.reload} />}
       <div role="tablist" aria-label="Lọc trạng thái" className="mb-6 flex gap-5 border-b border-border">
         {FILTERS.map((f) => (
           <button key={f.id} role="tab" aria-selected={status === f.id} onClick={() => setStatus(f.id)}
@@ -62,5 +68,91 @@ export default function PublishingPage() {
         </section>
       ))}
     </>
+  );
+}
+
+/** Post the shop's own picture (menu, new arrivals, a happy customer) without making a video. */
+function PhotoPost({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const accounts = useApi<SocialAccount[]>("/integrations/social-accounts");
+  const [file, setFile] = useState<File | null>(null);
+  const [caption, setCaption] = useState("");
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const [when, setWhen] = useState("");
+  const [error, setError] = useState<ApiError | null>(null);
+  const [busy, setBusy] = useState(false);
+  const connected = (accounts.data ?? []).filter((a) => a.status === "connected");
+  const chosen = picked ?? connected.map((a) => a.id);
+  const preview = useMemo(() => (file ? URL.createObjectURL(file) : ""), [file]);
+
+  async function submit() {
+    if (!file) return setError(new ApiError(422, "Chọn một ảnh"));
+    setBusy(true);
+    setError(null);
+    try {
+      const up = await api<{ object_id: string; upload_url: string; headers: Record<string, string> }>(
+        "/publishing-jobs/photos/presign",
+        { method: "POST", json: { filename: file.name, content_type: file.type, byte_size: file.size } },
+      );
+      const put = await fetch(up.upload_url, { method: "PUT", headers: up.headers, body: file });
+      if (!put.ok) throw new ApiError(put.status, "Tải ảnh lên chưa được, thử lại");
+      await api("/publishing-jobs/photos", {
+        method: "POST",
+        json: {
+          object_id: up.object_id,
+          caption,
+          social_account_ids: chosen,
+          scheduled_at: when ? new Date(when).toISOString() : null,
+        },
+      });
+      onDone();
+      onClose();
+    } catch (e) {
+      setError(e as ApiError);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      title="Đăng ảnh"
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Huỷ</Button>
+          <Button variant="primary" busy={busy} disabled={!file || !chosen.length} onClick={submit}>
+            {when ? "Lên lịch" : "Đăng ngay"}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4 text-sm">
+        {error && <ErrorNote error={error} />}
+        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-control p-4 text-muted hover:text-ink">
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview} alt="Ảnh sẽ đăng" className="max-h-64 rounded-md object-contain" />
+          ) : (
+            <span>Chọn ảnh JPG, PNG hoặc WEBP, tối đa 8 MB</span>
+          )}
+          <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        </label>
+        <Field label="Nội dung bài đăng" name="caption" textarea rows={4} value={caption} onChange={(e) => setCaption(e.target.value)} hint="Instagram nhận tối đa 2.200 ký tự" />
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 font-medium">Đăng lên</legend>
+          {connected.length === 0 && <p className="text-muted">Chưa kết nối Facebook hoặc Instagram (Cài đặt → Facebook &amp; Instagram).</p>}
+          {connected.map((a) => (
+            <label key={a.id} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={chosen.includes(a.id)}
+                onChange={(e) => setPicked(e.target.checked ? [...chosen, a.id] : chosen.filter((x) => x !== a.id))}
+              />
+              {a.name} · {a.provider === "instagram" ? "Instagram" : "Facebook"}
+            </label>
+          ))}
+        </fieldset>
+        <Field label="Hẹn giờ (để trống là đăng ngay)" name="when" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+      </div>
+    </Dialog>
   );
 }

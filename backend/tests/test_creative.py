@@ -760,3 +760,49 @@ def test_chat_lines_reach_the_render_job_and_replace_the_stat():
         {"who": "khach", "text": "Giá sao shop?"},
         {"who": "shop", "text": "Dạ 35.000đ ạ"},
     ]
+
+
+def test_photo_post_upload_and_schedule(client):
+    from tests.conftest import connect_page
+
+    h = signup(client)
+    acc = connect_page(client, h)["id"]
+    r = client.post(
+        "/api/v1/publishing-jobs/photos/presign",
+        json={"filename": "menu.png", "content_type": "image/png", "byte_size": 4},
+        headers=h,
+    )
+    assert r.status_code == 200
+    # the browser PUTs to the presigned URL; in tests write the bytes straight to local storage
+    from app.core import storage
+    from app.models import StorageObject
+
+    key = client.get("/api/v1/storage/usage", headers=h)  # warm-up call keeps the session alive
+    assert key.status_code == 200
+    import uuid as _uuid
+
+    from app.core import db as app_db
+
+    with app_db.SessionLocal() as db:
+        obj = db.get(StorageObject, _uuid.UUID(r.json()["object_id"]))
+        storage.put_bytes(obj.key, b"\\x89PNG", "image/png")
+    jobs = client.post(
+        "/api/v1/publishing-jobs/photos",
+        json={
+            "object_id": r.json()["object_id"],
+            "caption": "Menu mới",
+            "social_account_ids": [acc],
+            "scheduled_at": "2030-01-01T12:00:00+07:00",
+        },
+        headers=h,
+    )
+    assert jobs.status_code == 201
+    assert [(j["media_type"], j["status"], j["caption"]) for j in jobs.json()] == [
+        ("photo", "scheduled", "Menu mới")
+    ]
+    bad = client.post(
+        "/api/v1/publishing-jobs/photos/presign",
+        json={"filename": "a.gif", "content_type": "image/gif", "byte_size": 4},
+        headers=h,
+    )
+    assert bad.status_code == 415

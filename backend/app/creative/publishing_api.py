@@ -8,9 +8,17 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
+from app.core import storage
 from app.core.db import utcnow
 from app.core.deps import Marketing
-from app.models import Artifact, ArtifactVersion, PublishingJob, SocialAccount, StorageObject
+from app.models import (
+    Artifact,
+    ArtifactVersion,
+    Project,
+    PublishingJob,
+    SocialAccount,
+    StorageObject,
+)
 
 router = APIRouter(prefix="/publishing-jobs", tags=["publishing"])
 
@@ -159,3 +167,104 @@ def cancel_job(job_id: uuid.UUID, ctx: Marketing):
     ctx.audit("publishing.cancelled", "publishing_job", job.id)
     ctx.db.commit()
     return _out(ctx.db, job)
+
+
+# --- photo posts: the shop's own picture, no project or AI generation needed ---
+
+PHOTO_MIME = {"image/jpeg", "image/png", "image/webp"}
+PHOTO_PROJECT = "Ảnh đăng bài"
+
+
+class PhotoPresignIn(BaseModel):
+    filename: str = Field(min_length=1, max_length=200)
+    content_type: str
+    byte_size: int = Field(gt=0)
+
+
+class PhotoPostIn(BaseModel):
+    object_id: uuid.UUID
+    caption: str = Field(default="", max_length=5000)
+    social_account_ids: list[uuid.UUID] = Field(min_length=1, max_length=10)
+    scheduled_at: AwareDatetime | None = None  # None = publish now
+
+
+def _photo_project(ctx) -> Project:
+    """One project per workspace holds the photos posted from Lịch đăng (history and storage)."""
+    p = ctx.db.scalar(
+        select(Project).where(Project.workspace_id == ctx.ws_id, Project.name == PHOTO_PROJECT)
+    )
+    if p is None:
+        p = Project(workspace_id=ctx.ws_id, name=PHOTO_PROJECT, created_by=ctx.user.id)
+        ctx.db.add(p)
+        ctx.db.flush()
+    return p
+
+
+@router.post("/photos/presign")
+def presign_photo(body: PhotoPresignIn, ctx: Marketing):
+    if body.content_type not in PHOTO_MIME:
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Chỉ nhận ảnh JPG, PNG, WEBP")
+    if body.byte_size > 8 * 1024 * 1024:  # Facebook and Instagram both cap photos at 8 MB
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Ảnh tối đa 8 MB")
+    p = _photo_project(ctx)
+    safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in body.filename)[-120:]
+    obj = StorageObject(
+        workspace_id=ctx.ws_id,
+        project_id=p.id,
+        key=f"ws/{ctx.ws_id}/projects/{p.id}/posts/{uuid.uuid4().hex}-{safe}",
+        filename=body.filename,
+        mime_type=body.content_type,
+        byte_size=body.byte_size,
+        category="upload",
+    )
+    ctx.db.add(obj)
+    ctx.db.commit()
+    return {
+        "object_id": obj.id,
+        "upload_url": storage.presign_put(obj.key, obj.mime_type, 3600),
+        "headers": {"Content-Type": obj.mime_type},
+    }
+
+
+@router.post("/photos", response_model=list[PublishOut], status_code=201)
+def post_photo(body: PhotoPostIn, ctx: Marketing):
+    obj = ctx.get(StorageObject, body.object_id)
+    size = storage.size_of(obj.key)
+    if size is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ảnh chưa tải lên xong")
+    obj.byte_size, obj.status = size, "ready"
+    art = Artifact(
+        workspace_id=ctx.ws_id,
+        project_id=obj.project_id,
+        kind="image",
+        display_name=f"Ảnh · {obj.filename}"[:200],
+        status="approved",
+        updated_at=utcnow(),
+    )
+    ctx.db.add(art)
+    ctx.db.flush()
+    v = ArtifactVersion(
+        workspace_id=ctx.ws_id,
+        artifact_id=art.id,
+        version_number=1,
+        content={"source": "upload", "filename": obj.filename},
+        actor="user",
+        created_by=ctx.user.id,
+        storage_object_id=obj.id,
+    )
+    ctx.db.add(v)
+    ctx.db.flush()
+    art.current_version_id = v.id
+    ctx.db.commit()
+    return [
+        create_job(
+            PublishIn(
+                artifact_id=art.id,
+                social_account_id=acc,
+                caption=body.caption,
+                scheduled_at=body.scheduled_at,
+            ),
+            ctx,
+        )
+        for acc in body.social_account_ids
+    ]
