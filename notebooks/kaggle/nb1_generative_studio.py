@@ -563,6 +563,43 @@ def finish_shot(w: Worker, i: int, shot: dict, clip: Path, d: Path, accent: str,
     return out
 
 
+def end_card(w: Worker, job: dict, d: Path) -> Path | None:
+    """2.5 s close on the shop's real logo and its call to action, drawn here in a real font: asked to
+    show a logo or words, AI video garbles them, and an ad that never shows whose it is sells nothing."""
+    card = job["payload"].get("end_card")
+    if not card:
+        return None
+    from PIL import Image, ImageDraw
+
+    logo = Image.open(w.download(card["logo_url"], d / "logo.png")).convert("RGBA")
+    still = Image.new("RGB", (W, H), (247, 244, 240))
+    scale = min(W * 0.72 / logo.width, H * 0.16 / logo.height)
+    logo = logo.resize((int(logo.width * scale), int(logo.height * scale)), Image.LANCZOS)
+    top = int(H * 0.40) - logo.height // 2
+    still.paste(logo, ((W - logo.width) // 2, top), logo)
+    line = card.get("line", "").strip()
+    if line:
+        draw, font = ImageDraw.Draw(still), _font(58)
+        rows = [""]
+        for word in line.split():
+            trial = f"{rows[-1]} {word}".strip()
+            if rows[-1] and draw.textlength(trial, font=font) > W * 0.80:
+                rows.append(word)
+            else:
+                rows[-1] = trial
+        y = top + logo.height + 90
+        for row in rows[:3]:
+            draw.text(((W - draw.textlength(row, font=font)) / 2, y), row, font=font, fill=(14, 13, 12))
+            y += 80
+    png, out = d / "end_card.png", d / "end_card.mp4"
+    still.save(png)
+    ffmpeg("-loop", "1", "-t", "2.5", "-i", str(png), "-f", "lavfi", "-t", "2.5",
+           "-i", "anullsrc=channel_layout=stereo:sample_rate=32000",
+           "-vf", "fps=24,format=yuv420p,fade=t=in:st=0:d=0.35", *video_codec(), "-c:a", "aac", "-ar", "32000",
+           "-shortest", str(out))
+    return out
+
+
 def stage_bgm(w: Worker, job: dict, d: Path) -> Path:
     w.progress("ace-step:bgm", 0.75)
     bgm = d / "bgm_track.wav"
@@ -610,8 +647,10 @@ def handle(w: Worker, job: dict, d: Path) -> dict:
     came_in, goes_out = ["cut", *joins], [*joins, "cut"]
     clips = [finish_shot(w, i, shot, clip, d, accent, came_in[i], goes_out[i])
              for i, (shot, clip) in enumerate(zip(shots, clips, strict=True))]
+    card = end_card(w, job, d)
+    tail = [card] if card else []
     bgm = stage_bgm(w, job, d)
-    final = stage_mix(w, job, d, clips, bgm)
+    final = stage_mix(w, job, d, clips + tail, bgm)
     w.progress("upload", 0.95)
     w.upload("bgm", bgm)
     w.upload("final_video", final)
@@ -624,7 +663,7 @@ def handle(w: Worker, job: dict, d: Path) -> dict:
     }
     # Shorts reuse the finished shots (voice and text already in): opening + one benefit + CTA
     for k, plan in enumerate(job["payload"].get("shorts", []), 1):
-        short = stage_mix(w, job, d, [clips[i] for i in plan["shots"]], bgm, f"short_{k}.mp4")
+        short = stage_mix(w, job, d, [clips[i] for i in plan["shots"]] + tail, bgm, f"short_{k}.mp4")
         w.upload(f"short_{k}", short)
         outputs[f"short_{k}"] = {**meta, "duration": round(probe_duration(short), 2), "shots": plan["shots"]}
     return outputs

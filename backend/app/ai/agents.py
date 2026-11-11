@@ -430,10 +430,18 @@ chỉ số có trong tài liệu (ví dụ "505nm", "10 phút"), để trống n
   - chat: khi câu chuyện cần cho thấy tin nhắn (khách hỏi, cửa hàng trả lời), ghi tối đa 3 tin \
 [{{"who":"khach"|"shop","text":"..."}}] bằng tiếng Việt, ngắn; hệ thống tự vẽ khung chat rõ nét lên hình. \
 Shot có chat thì để trống stat.
-  - Màn hình: AI vẽ chữ, số, nút trên màn hình điện thoại/laptop bị nhoè thành chữ vô nghĩa. Không shot \
-nào quay cận hay macro màn hình, visual_prompt và continuity không tả nội dung màn hình (không chữ, giá, \
-nút, biểu đồ, dashboard): quay người cầm máy và nét mặt, màn hình quay đi hoặc chỉ là ánh sáng màu mờ. \
-Giá và số liệu để ở on_screen_text, stat; tin nhắn để ở chat.
+  - Màn hình: AI tự vẽ chữ, số, nút trên màn hình thì bị nhoè thành chữ vô nghĩa. Nếu dự án có tệp \
+vai trò app_screen (ảnh màn hình app của chính cửa hàng): sản phẩm là app đó trên điện thoại, \
+continuity.product là "a smartphone showing the app screen from the reference image"; điện thoại luôn \
+cầm trên tay, màn hình sáng hướng về người dùng, ở cảnh giới thiệu app thì xoay màn hình về phía máy \
+quay; visual_prompt không tự tả chữ trên màn hình, chỉ ghi "the app screen from the reference". Nếu \
+không có app_screen: không quay cận màn hình, không tả nội dung màn hình, màn hình chỉ là ánh sáng mờ. \
+Không bao giờ để điện thoại úp mặt mà vẫn phát sáng. Giá và số liệu để ở on_screen_text, stat; tin nhắn \
+để ở chat.
+  - Diễn xuất: mỗi visual_prompt tả một diễn biến cảm xúc trong shot (ví dụ cau mày nhìn tin nhắn rồi \
+thở phào, bật cười, gật đầu, quay sang nói với khách), có cử động tay, vai, ánh mắt tự nhiên như đang \
+làm việc thật; không tả kiểu đứng yên tạo dáng cười vào máy quay. Câu chuyện đi theo nhịp: vấn đề → \
+dùng app → kết quả thấy được (khách nhắn lại, đơn được giữ, khách tới quán).
   - Trang phục diễn viên trơn, không logo, chữ hay hình thêu.
 - motion: chuyển động máy quay/chủ thể bằng tiếng Anh, nối được với shot sau. music_mood: tag nhạc nền \
 tiếng Anh. caption/hook/cta/on_screen_text/voiceover: tiếng Việt."""

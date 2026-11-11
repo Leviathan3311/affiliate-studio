@@ -11,14 +11,12 @@ import { Initials } from "./ui";
 import { useWorkspace } from "./workspace";
 
 export function Mark({ size = 22 }: { size?: number }) {
-  // Lotus bud: three petals opening from one stem, the product's mark.
+  // A chat bubble with sales going up: the AI answers the shop's messages and the shop grows.
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
       <rect width="24" height="24" rx="6" fill="var(--accent)" />
-      <path d="M12 5c2.2 2.2 2.2 6.8 0 9-2.2-2.2-2.2-6.8 0-9Z" fill="#fff" />
-      <path d="M6 9.5c3 .3 5.4 2.6 6 5.5-3-.3-5.4-2.6-6-5.5Z" fill="#fff" opacity=".85" />
-      <path d="M18 9.5c-3 .3-5.4 2.6-6 5.5 3-.3 5.4-2.6 6-5.5Z" fill="#fff" opacity=".85" />
-      <path d="M12 15v4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M8.2 5.2h7.6a3.4 3.4 0 0 1 3.4 3.4v4.6a3.4 3.4 0 0 1-3.4 3.4h-5.3l-3.4 2.7v-2.8a3.4 3.4 0 0 1-2.3-3.3V8.6a3.4 3.4 0 0 1 3.4-3.4Z" fill="#fff" />
+      <path d="M8.4 13.2l2.5-2.5 1.9 1.9 3-3M13.6 9.6h2.2v2.2" fill="none" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

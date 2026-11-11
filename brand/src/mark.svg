@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- GrowthPilot: a chat bubble (AI answers the shop's messages) with sales going up -->
+  <rect width="24" height="24" rx="6" fill="#f0789e"/>
+  <path d="M8.2 5.2h7.6a3.4 3.4 0 0 1 3.4 3.4v4.6a3.4 3.4 0 0 1-3.4 3.4h-5.3l-3.4 2.7v-2.8a3.4 3.4 0 0 1-2.3-3.3V8.6a3.4 3.4 0 0 1 3.4-3.4Z" fill="#fff"/>
+  <path d="M8.4 13.2l2.5-2.5 1.9 1.9 3-3" fill="none" stroke="#f0789e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M13.6 9.6h2.2v2.2" fill="none" stroke="#f0789e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

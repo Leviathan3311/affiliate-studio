@@ -108,6 +108,7 @@ export const INPUT_ROLE: Record<string, string> = {
   logo: "Logo",
   product: "Ảnh sản phẩm",
   facility: "Ảnh cơ sở",
+  app_screen: "Màn hình app (điện thoại)",
   staff: "Nhân viên / người mẫu",
   reference: "Ảnh tham chiếu",
   source_video: "Video nguồn",

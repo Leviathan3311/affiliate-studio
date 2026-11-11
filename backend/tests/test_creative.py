@@ -860,3 +860,35 @@ def test_ai_caption_for_a_photo_drops_invented_prices(client, monkeypatch):
     assert "Khách văn phòng quận 1" in seen["text"]  # the project's brief reached the AI
     text = out.json()["caption"]
     assert "99.000đ" not in text and "35.000đ" in text and "#caphemuoi #saigon" in text
+
+
+def test_app_screen_shows_on_the_phone_and_the_logo_closes_the_video(client, db, spa, gemini):
+    h, p = spa
+    base = f"/api/v1/projects/{p['id']}"
+    for name, role in (("logo.png", "logo"), ("app.png", "app_screen")):
+        pre = client.post(
+            f"{base}/inputs/presign",
+            headers=h,
+            json={"filename": name, "content_type": "image/png", "byte_size": 4},
+        ).json()
+        put_presigned(client, pre["upload_url"], b"\x89PNG", "image/png")
+        client.post(
+            f"{base}/inputs",
+            headers=h,
+            json={"object_id": pre["object_id"], "role": role, "usage_confirmed": True},
+        )
+    client.post(f"{base}/scripts", headers=h, json={"count": 1})
+    a = client.get(f"{base}/artifacts?kind=script", headers=h).json()[0]
+    client.post(f"/api/v1/artifacts/{a['id']}/select", headers=h)
+    client.post(f"{base}/generate", headers=h, json={"script_artifact_id": a["id"]})
+    job = client.post(
+        "/api/v1/worker/jobs/claim",
+        headers={"Authorization": "Bearer worker-secret"},
+        json={"worker_id": "nb1", "kinds": ["studio"]},
+    ).json()["job"]["payload"]
+    # the notebook stages the first product image: the app's screen, as the product it is
+    assert job["references"][0]["role"] == "product" and job["references"][0]["title"] == "app.png"
+    for prompt in (job["studio_master"]["prompt"], job["shots"][0]["prompt"]):
+        assert "phone screen, which shows the app exactly as in the reference" in prompt
+        assert "soft blurred glow" not in prompt and "never lying face down" in prompt
+    assert job["end_card"]["line"] == SCRIPT["cta"] and job["end_card"]["logo_url"]

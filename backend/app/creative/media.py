@@ -31,16 +31,24 @@ from app.models import (
 )
 
 MAX_SHOTS = VIDEO_SHOTS
+# a "white polo shirt" came out with a famous brand's polo-player badge
+PLAIN_CLOTHES = " Clothes are plain, with no logo, emblem or embroidered badge."
+# an app screen came out as gibberish ("Br coner rubbing"); readable UI is drawn afterwards
 NO_TEXT = (
     " No text, letters, logos or watermarks anywhere in the frame."
-    # a "white polo shirt" came out with a famous brand's polo-player badge
-    " Clothes are plain, with no logo, emblem or embroidered badge."
-    # an app screen came out as gibberish ("Br coner rubbing"); readable UI is drawn afterwards
-    " Any phone, tablet or laptop screen shows only a soft blurred glow of colour, never a "
+    + PLAIN_CLOTHES
+    + " Any phone, tablet or laptop screen shows only a soft blurred glow of colour, never a "
     "readable app, words, numbers or buttons."
 )
+# With the app's own screen as the reference image the phone shows that screen instead: a phone
+# lying face down and glowing, or always turned away, made the ad for an app make no sense.
+APP_SCREEN = (
+    " No text, letters, logos or watermarks anywhere except on the phone screen, which shows the app "
+    "exactly as in the reference image (same layout, colours and logo). The phone is held naturally "
+    "in hand, screen lit and facing the person using it, never lying face down." + PLAIN_CLOTHES
+)
 # H3 wrote a garbled end card ("wi chrến hện") over a final "reveal" shot with a "brand jingle"
-NO_TEXT_VIDEO = NO_TEXT + " No captions, subtitles, title cards or end card ever appear."
+NO_CARDS = " No captions, subtitles, title cards or end card ever appear."
 MAX_SHORTS = 5
 MIME = {
     "png": "image/png",
@@ -155,7 +163,15 @@ def create_studio_job(
     disable_style: bool = False,
 ) -> MediaJob:
     script = script_version.content
-    refs = _references(db, project, ("product", "facility", "logo", "staff"))
+    refs = _references(db, project, ("app_screen", "product", "facility", "logo", "staff"))
+    # The notebook stages its first product/facility image as the reference: the app's screen goes
+    # first, as the product it is.
+    app = any(r["role"] == "app_screen" for r in refs)
+    refs = [{**r, "role": "product"} for r in refs if r["role"] == "app_screen"] + [
+        r for r in refs if r["role"] != "app_screen"
+    ]
+    no_text = APP_SCREEN if app else NO_TEXT
+    logo = next((r for r in refs if r["role"] == "logo"), None)
     styles = {
         m: resolve_style(db, project.workspace_id, project.id, m)
         for m in ("image", "video", "audio")
@@ -170,8 +186,9 @@ def create_studio_job(
     # (no product yet) was drawn with the product forced in. Every shot gets its own first frame.
     c = script.get("continuity") or {}
     hero = (
-        f"Camera: Medium shot. {c['talent']} holds {c['product']} at chest height and looks at it "
-        f"with a soft smile, in {c.get('setting') or 'a bright, tidy shop interior'}."
+        f"Camera: Medium shot. {c['talent']} holds {c['product']} naturally in one hand, glances "
+        "at it and breaks into a relaxed, genuine laugh, shoulders loose, mid-movement rather than "
+        f"posing, in {c.get('setting') or 'a bright, tidy shop interior'}."
         if c.get("product") and c.get("talent")
         else _camera(first) + first["visual_prompt"]
     )
@@ -179,7 +196,7 @@ def create_studio_job(
     master = compose(
         modality="image",
         task="Photoreal studio advertising key visual, vertical 9:16, product kept identical to the "
-        f"reference photo with the background re-staged.{NO_TEXT}",
+        f"reference photo with the background re-staged.{no_text}",
         subject=hero + same,
         references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
         style=styles["image"],
@@ -188,7 +205,7 @@ def create_studio_job(
     thumbnail = compose(
         modality="image",
         task="Vertical 9:16 Facebook thumbnail/banner. Keep the upper third a calm, plain background "
-        f"for a headline that is added afterwards.{NO_TEXT}",
+        f"for a headline that is added afterwards.{no_text}",
         subject=hero + same,
         references=[{k: r[k] for k in ("role", "title", "preserve")} for r in refs],
         style=styles["image"],
@@ -202,7 +219,7 @@ def create_studio_job(
         plate = compose(
             modality="image",
             task="Edit the reference image: remove the product completely, her hands rest empty in "
-            "her lap; keep the same person, pose, clothes, light and room unchanged." + NO_TEXT,
+            "her lap; keep the same person, pose, clothes, light and room unchanged." + no_text,
             subject=_continuity(script, with_product=False).strip(),
             style=styles["image"],
             **common,
@@ -215,7 +232,7 @@ def create_studio_job(
             modality="image",
             task="Photoreal first frame of one shot of the same vertical 9:16 video ad. "
             "Same person, room and product design as the reference image, but the product is only "
-            f"where this shot puts it; new camera framing and action.{NO_TEXT}",
+            f"where this shot puts it; new camera framing and action.{no_text}",
             subject=_camera(s)
             + s["visual_prompt"]
             + _continuity(script, s.get("shows_product", True)),
@@ -228,7 +245,7 @@ def create_studio_job(
     clips = [
         compose(
             modality="video",
-            task=f"Image-to-video with synchronized audio (SFX, ambience, voice if any), 9:16.{NO_TEXT_VIDEO}",
+            task=f"Image-to-video with synchronized audio (SFX, ambience, voice if any), 9:16.{no_text}{NO_CARDS}",
             # English only: the Vietnamese description adds nothing the video model can read.
             subject=f"{_camera(s)}{s['visual_prompt']}. Motion: {s['motion'] or 'slow push-in'}. "
             f"Sound: {s['sfx'] or 'soft room ambience'}."
@@ -238,7 +255,7 @@ def create_studio_job(
         )
         for s in shots
     ]
-    duration = int(min(60, max(10, sum(s["duration_seconds"] for s in shots) + 2)))
+    duration = int(min(60, max(10, sum(s["duration_seconds"] for s in shots) + 4)))
     bgm = compose(
         modality="audio",
         task=f"{duration}s background music bed for an advertisement, loopable ending.",
@@ -276,6 +293,9 @@ def create_studio_job(
         "aspect_ratio": "9:16",
         "references": refs,
         "studio_master": {"prompt": master.prompt, "model": master.model},
+        # the shop's real logo and call to action close the video, drawn by the notebook: AI video
+        # garbles any logo or words it is asked to show
+        "end_card": {"logo_key": logo["key"], "line": script.get("cta", "")} if logo else None,
         "plate": {"prompt": plate.prompt, "model": plate.model} if plate else None,
         "thumbnail": {
             "prompt": thumbnail.prompt,
@@ -380,7 +400,7 @@ def prepare_voiceover(db: Session, job: MediaJob) -> None:
             spoken = speech.seconds(wav) + 0.8  # starts 0.3 s in, a breath at the end
             shot["duration_seconds"] = min(10, max(shot["duration_seconds"], round(spoken, 1)))
         shots.append(shot)
-    total = int(min(60, max(10, sum(s["duration_seconds"] for s in shots) + 2)))
+    total = int(min(60, max(10, sum(s["duration_seconds"] for s in shots) + 4)))
     job.payload = {
         **job.payload,
         "shots": shots,
@@ -396,6 +416,11 @@ def presigned_payload(job: MediaJob) -> dict:
         payload["references"] = [
             {**r, "url": storage.presign_get(r["key"])} for r in payload.get("references", [])
         ]
+        if payload.get("end_card"):
+            payload["end_card"] = {
+                **payload["end_card"],
+                "logo_url": storage.presign_get(payload["end_card"]["logo_key"]),
+            }
         payload["shots"] = [
             {**s, "voice_url": storage.presign_get(s["voice_key"])} if s.get("voice_key") else s
             for s in payload["shots"]

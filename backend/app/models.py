@@ -428,6 +428,7 @@ INPUT_ROLES = (
     "logo",
     "product",
     "facility",
+    "app_screen",
     "staff",
     "reference",
     "source_video",
